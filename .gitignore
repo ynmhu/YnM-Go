@@ -1,0 +1,19 @@
+# Bináris fájlok
+/YnMGo
+/bin/
+
+# Konfigurációs fájlok
+/config/config.yaml
+
+# Log fájlok
+/log/
+/logs/
+
+# IDE specifikus
+.idea/
+.vscode/
+
+# Egyéb
+*.log
+*.swp
+*.bak
