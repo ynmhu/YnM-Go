@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"net"
 	"strings"
-	"YnM-Go/config"
+	"sync"
+	//"time"
+
+	"github.com/ynmhu/YnM-Go/config"
 )
 
 type Message struct {
@@ -16,30 +19,36 @@ type Message struct {
 
 type Client struct {
 	conn      net.Conn
+	OnPong func(pongID string)
 	config    *config.Config
 	OnConnect func()
 	OnMessage func(Message)
+	mu        sync.Mutex // Írási szinkronizációhoz
+	connected bool
 }
 
+// Konstruktor
 func NewClient(cfg *config.Config) *Client {
 	return &Client{config: cfg}
 }
 
+// Kapcsolódás az IRC szerverhez
 func (c *Client) Connect() error {
 	conn, err := net.Dial("tcp", c.config.Server)
 	if err != nil {
-		return err
+		return fmt.Errorf("cannot connect to server: %w", err)
 	}
 	c.conn = conn
+	c.connected = true
 
 	// Bejelentkezés
-	fmt.Fprintf(c.conn, "NICK %s\r\n", c.config.Nick)
-	fmt.Fprintf(c.conn, "USER %s\r\n", c.config.User)
+	c.SendRaw(fmt.Sprintf("NICK %s", c.config.Nick))
+	c.SendRaw(fmt.Sprintf("USER %s 8 * :%s", c.config.User, c.config.User))
 
-	// Üzenetek olvasása
+	// Üzenetek olvasása külön goroutine-ban
 	go c.readLoop()
 
-	// OnConnect esemény
+	// OnConnect callback hívása, ha van
 	if c.OnConnect != nil {
 		c.OnConnect()
 	}
@@ -47,40 +56,74 @@ func (c *Client) Connect() error {
 	return nil
 }
 
+// Kapcsolat bontása
 func (c *Client) Disconnect() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if c.conn != nil {
 		c.conn.Close()
+		c.conn = nil
+		c.connected = false
 	}
 }
 
+// Csatlakozás csatornához
 func (c *Client) Join(channel string) {
-	fmt.Fprintf(c.conn, "JOIN %s\r\n", channel)
+	c.SendRaw(fmt.Sprintf("JOIN %s", channel))
 }
 
+// Privát üzenet küldése
 func (c *Client) SendMessage(target, text string) {
-	fmt.Fprintf(c.conn, "PRIVMSG %s :%s\r\n", target, text)
+	c.SendRaw(fmt.Sprintf("PRIVMSG %s :%s", target, text))
 }
 
+// Alacsony szintű üzenetküldés - szálbiztos
+func (c *Client) SendRaw(message string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if !c.connected || c.conn == nil {
+		return fmt.Errorf("not connected")
+	}
+
+	_, err := c.conn.Write([]byte(message + "\r\n"))
+	if err != nil {
+		return fmt.Errorf("failed to send message: %w", err)
+	}
+
+	fmt.Println(">>", message) // Debug log küldött üzenetekhez
+	return nil
+}
+
+// Folyamatos olvasás a szervertől
 func (c *Client) readLoop() {
 	reader := bufio.NewReader(c.conn)
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
-			// Hibakezelés
+			// Hiba vagy kapcsolat bontás
+			c.Disconnect()
 			break
 		}
 
 		line = strings.TrimSpace(line)
-		fmt.Println("<<", line)
+		fmt.Println("<<", line) // Debug log érkező üzenetekhez
 
-		// PING válasz
-		if strings.HasPrefix(line, "PING ") {
-			pong := strings.TrimPrefix(line, "PING ")
-			fmt.Fprintf(c.conn, "PONG %s\r\n", pong)
+		// PING üzenetre válasz PONG-gal
+		if strings.Contains(line, " PONG ") {
+			parts := strings.Split(line, " ")
+			if len(parts) >= 4 {
+				pongID := strings.TrimPrefix(parts[3], ":")
+				if c.OnPong != nil {
+					c.OnPong(pongID)
+				}
+			}
 			continue
 		}
 
-		// Üzenetek parse-olása
+
+		// Privát üzenet parse és callback hívás
 		if c.OnMessage != nil {
 			if msg := parseMessage(line); msg != nil {
 				c.OnMessage(*msg)
@@ -89,15 +132,25 @@ func (c *Client) readLoop() {
 	}
 }
 
+// Egyszerű IRC PRIVMSG üzenet feldolgozó
 func parseMessage(line string) *Message {
 	parts := strings.Split(line, " ")
 	if len(parts) < 4 || parts[1] != "PRIVMSG" {
 		return nil
 	}
 
-	sender := strings.Split(parts[0], "!")[0][1:]
+	sender := ""
+	if idx := strings.Index(parts[0], "!"); idx > 0 {
+		sender = parts[0][1:idx]
+	} else if len(parts[0]) > 1 {
+		sender = parts[0][1:]
+	}
+
 	channel := parts[2]
-	text := strings.Join(parts[3:], " ")[1:]
+	text := strings.Join(parts[3:], " ")
+	if len(text) > 0 {
+		text = text[1:] // Első karakter ':' eltávolítása
+	}
 
 	return &Message{
 		Sender:  sender,

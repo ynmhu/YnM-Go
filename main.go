@@ -7,17 +7,21 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-	"YnM-Go/config"
-	"YnM-Go/irc"
-	"YnM-Go/plugins"
+    "github.com/ynmhu/YnM-Go/config"
+    "github.com/ynmhu/YnM-Go/irc"
+    "github.com/ynmhu/YnM-Go/plugins"
 )
+
 
 func main() {
 	cfg, err := config.Load("config/config.yaml")
 	if err != nil {
 		log.Fatalf("Config betöltési hiba: %v", err)
 	}
-
+    if cfg.LogDir == "" {
+    log.Fatal("Log könyvtár nincs megadva a configban!")
+	
+}
 	// Log könyvtár létrehozása
 	if err := os.MkdirAll(cfg.LogDir, 0755); err != nil {
 		log.Fatalf("Log könyvtár létrehozási hiba: %v", err)
@@ -25,14 +29,29 @@ func main() {
 
 	// IRC kapcsolat létrehozása
 	bot := irc.NewClient(cfg)
-	
+
 	// Pluginok betöltése
 	pluginManager := plugins.NewManager()
-	pluginManager.Register(&plugins.PingPlugin{})
 
-	// Névnap plugin hozzáadása CSAK EGYSZER
+	// Ping plugin létrehozása és beállítása a botban
+	duration, err := time.ParseDuration(cfg.PingCommandCooldown)
+	if err != nil {
+		log.Fatalf("Nem sikerült beolvasni a ping parancs cooldown időt: %v", err)
+	}
+	pingPlugin := plugins.NewPingPlugin(bot, duration)
+	bot.OnPong = func(pongID string) {
+		pingPlugin.HandlePong(pongID)
+	}
+	pluginManager.Register(pingPlugin)
+
+	// Névnap plugin regisztrálása
 	nameDayPlugin := plugins.NewNameDayPlugin([]string{"#YnM", "#Magyar"})
 	pluginManager.Register(nameDayPlugin)
+	
+	//admin
+	adminPlugin := plugins.NewAdminPlugin()
+	pluginManager.Register(adminPlugin)
+
 
 	// Időzített üzenetek kezelése
 	go func() {

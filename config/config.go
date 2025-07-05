@@ -6,11 +6,12 @@ import (
 )
 
 type Config struct {
-	Server  string   `yaml:"server"`
-	Nick    string   `yaml:"nick"`
-	User    string   `yaml:"user"`
-	Channels []string `yaml:"channels"`
-	LogDir  string   `yaml:"log_dir"`
+    Server              string
+    Nick                string
+    User                string
+    Channels            []string
+    LogDir              string `yaml:"log_dir"`
+    PingCommandCooldown  string `yaml:"ping_command_cooldown"`
 }
 
 func Load(filename string) (*Config, error) {

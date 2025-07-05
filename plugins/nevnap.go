@@ -4,14 +4,19 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
-	"YnM-Go/irc"
+	"github.com/ynmhu/YnM-Go/irc"
+
 )
 
 type NameDayPlugin struct {
-    AnnounceChannels []string // Most már több csatornát is kezel
+    AnnounceChannels []string
+    userRequestTimes map[string][]time.Time   // felhasználó lekérései időpontjai
+    userBanUntil    map[string]time.Time      // felhasználói tiltások lejárati ideje
+    userBanNotified map[string]bool            // jelezte-e már a tiltást
+	mu              sync.Mutex
 }
-
 
 var nameDays = map[string][]string{
 	
@@ -389,32 +394,74 @@ var nameDays = map[string][]string{
 func NewNameDayPlugin(channels []string) *NameDayPlugin {
     return &NameDayPlugin{
         AnnounceChannels: channels,
+        userRequestTimes: make(map[string][]time.Time),
+        userBanUntil:    make(map[string]time.Time),
+        userBanNotified: make(map[string]bool),
     }
 }
 
 func (p *NameDayPlugin) HandleMessage(msg irc.Message) string {
-	cmd := strings.TrimSpace(strings.ToLower(msg.Text))
-	
-	// Handle !nevnap command
-	if strings.HasPrefix(cmd, "!nevnap") {
-		args := strings.TrimSpace(cmd[len("!nevnap"):])
-		
-		// Case 1: No arguments - show today and tomorrow
-		if args == "" {
-			return p.getTodayTomorrow()
-		}
-		
-		// Case 2: Date format (MM.DD)
-		if day, month, ok := p.parseDate(args); ok {
-			return p.getNameDayByDate(month, day)
-		}
-		
-		// Case 3: Name search
-		return p.searchNameDay(args)
-	}
-	
-	return ""
+    cmd := strings.TrimSpace(strings.ToLower(msg.Text))
+    
+    if !strings.HasPrefix(cmd, "!nevnap") {
+        return ""
+    }
+
+    p.mu.Lock()
+    defer p.mu.Unlock()
+
+    now := time.Now()
+    user := msg.Sender
+
+    // Tiltás ellenőrzése
+    banUntil, banned := p.userBanUntil[user]
+    if banned && now.Before(banUntil) {
+        if !p.userBanNotified[user] {
+            remaining := banUntil.Sub(now).Round(time.Second)
+            p.userBanNotified[user] = true
+            return fmt.Sprintf("Túl sok !nevnap parancs, kérlek várj még %s-ig!", remaining)
+        }
+        return ""  // már jelezte, nem válaszol többször
+    } else if banned && now.After(banUntil) {
+        // Tiltás lejárt, töröljük
+        delete(p.userBanUntil, user)
+        delete(p.userBanNotified, user)
+        p.userRequestTimes[user] = nil
+    }
+
+    // Kitisztítjuk az 5 percnél régebbi hívásokat
+    times := p.userRequestTimes[user]
+    validTimes := []time.Time{}
+    for _, t := range times {
+        if now.Sub(t) <= 5*time.Minute {
+            validTimes = append(validTimes, t)
+        }
+    }
+    p.userRequestTimes[user] = validTimes
+
+    // Ha 3 vagy több hívás van 5 perc alatt, tiltjuk 24 órára
+    if len(validTimes) >= 3 {
+        p.userBanUntil[user] = now.Add(24 * time.Hour)
+        p.userBanNotified[user] = true  // azonnal jelezzük
+        p.userRequestTimes[user] = nil
+        return "Túl sok !nevnap parancs, ezért 24 órára le vagy tiltva erről a parancsról."
+    }
+
+    // Hozzáadjuk az aktuális hívást
+    p.userRequestTimes[user] = append(p.userRequestTimes[user], now)
+
+    // Eredeti parancs feldolgozása (eredeti kódod, itt van vágva pl.)
+    args := strings.TrimSpace(cmd[len("!nevnap"):])
+    
+    if args == "" {
+        return p.getTodayTomorrow()
+    }
+    if day, month, ok := p.parseDate(args); ok {
+        return p.getNameDayByDate(month, day)
+    }
+    return p.searchNameDay(args)
 }
+
 
 func (p *NameDayPlugin) OnTick() []irc.Message {
     now := time.Now()
@@ -453,6 +500,8 @@ func (p *NameDayPlugin) OnTick() []irc.Message {
 
     return messages
 }
+
+
 
 // Helper functions
 func (p *NameDayPlugin) getTodayTomorrow() string {

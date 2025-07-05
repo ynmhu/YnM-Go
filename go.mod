@@ -1,4 +1,4 @@
-module YnM-Go
+module github.com/ynmhu/YnM-Go
 
 go 1.23.2
 

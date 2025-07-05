@@ -1,7 +1,7 @@
 package plugins
 
 import (
-	"YnM-Go/irc"
+	"github.com/ynmhu/YnM-Go/irc"
 
 )
 
@@ -17,7 +17,9 @@ type Manager struct {
 }
 
 func NewManager() *Manager {
-	return &Manager{}
+	return &Manager{
+		plugins: make([]Plugin, 0),
+	}
 }
 
 func (m *Manager) Register(plugin Plugin) {
