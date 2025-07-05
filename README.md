@@ -93,4 +93,4 @@ git push origin main
 
 Fejlesztette: **Markus (YnM.hu)**
 📧 [markus@ynm.hu](mailto:markus@ynm.hu)
-Szerzői jog: 2024 – Minden jog fenntartva.
+Szerzői jog: 2012-2025 – Minden jog fenntartva.
