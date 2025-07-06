@@ -1,0 +1,285 @@
+// ============================================================================
+//  Szerzői jog © 2024 Markus (markus@ynm.hu)
+//  https://ynm.hu   – főoldal
+//  https://forum.ynm.hu   – hivatalos fórum
+//  https://bot.ynm.hu     – bot oldala és dokumentáció
+//
+//  Minden jog fenntartva. A kód Markus tulajdona, tilos terjeszteni vagy
+//  módosítani a szerző írásos engedélye nélkül.
+//
+//  Ez a fájl a YnM-Go IRC-bot rendszerének része.
+// ============================================================================
+
+package plugins
+
+import (
+	"fmt"
+	"strings"
+)
+
+// AdminCommands handles admin-related IRC commands
+type AdminCommands struct {
+	adminStore *AdminStore
+	bot        IRCBot // Interface for sending messages
+}
+
+// IRCBot interface for sending messages (you'll need to implement this based on your bot structure)
+type IRCBot interface {
+	SendMessage(channel, message string)
+	SendPrivateMessage(nick, message string)
+	GetUserHostmask(nick string) string // Get user's hostmask
+}
+
+func NewAdminCommands(adminStore *AdminStore, bot IRCBot) *AdminCommands {
+	return &AdminCommands{
+		adminStore: adminStore,
+		bot:        bot,
+	}
+}
+
+// HandleAddAdmin handles the !addadmin command (Owner only)
+func (a *AdminCommands) HandleAddAdmin(channel, senderNick, senderHostmask, message string) {
+	// Check if sender is owner
+	if a.adminStore.GetAdminLevel(senderNick, senderHostmask) < AdminLevelOwner {
+		a.bot.SendMessage(channel, fmt.Sprintf("%s: Access denied. Owner level required.", senderNick))
+		return
+	}
+
+	// Parse command: !addadmin Nick
+	parts := strings.Fields(message)
+	if len(parts) < 2 {
+		a.bot.SendMessage(channel, fmt.Sprintf("%s: Usage: !addadmin <nick>", senderNick))
+		return
+	}
+
+	targetNick := parts[1]
+	
+	// Get target user's hostmask
+	targetHostmask := a.bot.GetUserHostmask(targetNick)
+	if targetHostmask == "" {
+		a.bot.SendMessage(channel, fmt.Sprintf("%s: User %s not found or not online.", senderNick, targetNick))
+		return
+	}
+
+	// Check if user is already an admin
+	if a.adminStore.IsAdmin(targetNick, targetHostmask) {
+		currentLevel := a.adminStore.GetAdminLevel(targetNick, targetHostmask)
+		levelName := a.getLevelName(currentLevel)
+		a.bot.SendMessage(channel, fmt.Sprintf("%s: %s is already a %s.", senderNick, targetNick, levelName))
+		return
+	}
+
+	// Add as admin
+	a.adminStore.AddAdmin(targetNick, targetHostmask, AdminLevelAdmin, senderNick)
+	
+	// Save to file
+	if err := a.adminStore.Save(); err != nil {
+		a.bot.SendMessage(channel, fmt.Sprintf("%s: Error saving admin data: %v", senderNick, err))
+		return
+	}
+
+	a.bot.SendMessage(channel, fmt.Sprintf("%s: Successfully added %s as admin.", senderNick, targetNick))
+}
+
+// HandleAddVIP handles the !addvip command (Admin+ only)
+func (a *AdminCommands) HandleAddVIP(channel, senderNick, senderHostmask, message string) {
+	// Check if sender is admin or higher
+	if a.adminStore.GetAdminLevel(senderNick, senderHostmask) < AdminLevelAdmin {
+		a.bot.SendMessage(channel, fmt.Sprintf("%s: Access denied. Admin level required.", senderNick))
+		return
+	}
+
+	// Parse command: !addvip Nick
+	parts := strings.Fields(message)
+	if len(parts) < 2 {
+		a.bot.SendMessage(channel, fmt.Sprintf("%s: Usage: !addvip <nick>", senderNick))
+		return
+	}
+
+	targetNick := parts[1]
+	
+	// Get target user's hostmask
+	targetHostmask := a.bot.GetUserHostmask(targetNick)
+	if targetHostmask == "" {
+		a.bot.SendMessage(channel, fmt.Sprintf("%s: User %s not found or not online.", senderNick, targetNick))
+		return
+	}
+
+	// Check if user is already an admin or higher
+	currentLevel := a.adminStore.GetAdminLevel(targetNick, targetHostmask)
+	if currentLevel >= AdminLevelAdmin {
+		levelName := a.getLevelName(currentLevel)
+		a.bot.SendMessage(channel, fmt.Sprintf("%s: %s is already a %s.", senderNick, targetNick, levelName))
+		return
+	}
+
+	// Check if user is already VIP
+	if currentLevel == AdminLevelVIP {
+		a.bot.SendMessage(channel, fmt.Sprintf("%s: %s is already a VIP.", senderNick, targetNick))
+		return
+	}
+
+	// Add as VIP
+	a.adminStore.AddAdmin(targetNick, targetHostmask, AdminLevelVIP, senderNick)
+	
+	// Save to file
+	if err := a.adminStore.Save(); err != nil {
+		a.bot.SendMessage(channel, fmt.Sprintf("%s: Error saving admin data: %v", senderNick, err))
+		return
+	}
+
+	a.bot.SendMessage(channel, fmt.Sprintf("%s: Successfully added %s as VIP.", senderNick, targetNick))
+}
+
+// HandleRemoveAdmin handles the !removeadmin command (Owner only)
+func (a *AdminCommands) HandleRemoveAdmin(channel, senderNick, senderHostmask, message string) {
+	// Check if sender is owner
+	if a.adminStore.GetAdminLevel(senderNick, senderHostmask) < AdminLevelOwner {
+		a.bot.SendMessage(channel, fmt.Sprintf("%s: Access denied. Owner level required.", senderNick))
+		return
+	}
+
+	// Parse command: !removeadmin Nick
+	parts := strings.Fields(message)
+	if len(parts) < 2 {
+		a.bot.SendMessage(channel, fmt.Sprintf("%s: Usage: !removeadmin <nick>", senderNick))
+		return
+	}
+
+	targetNick := parts[1]
+	
+	// Check if user exists in admin list
+	if _, exists := a.adminStore.GetAdmin(targetNick); !exists {
+		a.bot.SendMessage(channel, fmt.Sprintf("%s: %s is not in the admin list.", senderNick, targetNick))
+		return
+	}
+
+	// Remove admin
+	if a.adminStore.RemoveAdmin(targetNick) {
+		// Save to file
+		if err := a.adminStore.Save(); err != nil {
+			a.bot.SendMessage(channel, fmt.Sprintf("%s: Error saving admin data: %v", senderNick, err))
+			return
+		}
+		a.bot.SendMessage(channel, fmt.Sprintf("%s: Successfully removed %s from admin list.", senderNick, targetNick))
+	} else {
+		a.bot.SendMessage(channel, fmt.Sprintf("%s: Failed to remove %s from admin list.", senderNick, targetNick))
+	}
+}
+
+// HandleListAdmins handles the !listadmins command (Admin+ only)
+func (a *AdminCommands) HandleListAdmins(channel, senderNick, senderHostmask, message string) {
+	// Check if sender is admin or higher
+	if a.adminStore.GetAdminLevel(senderNick, senderHostmask) < AdminLevelAdmin {
+		a.bot.SendMessage(channel, fmt.Sprintf("%s: Access denied. Admin level required.", senderNick))
+		return
+	}
+
+	admins := a.adminStore.ListAdmins()
+	if len(admins) == 0 {
+		a.bot.SendMessage(channel, fmt.Sprintf("%s: No admins found.", senderNick))
+		return
+	}
+
+	// Group admins by level
+	owners := []string{}
+	adminList := []string{}
+	vips := []string{}
+
+	for _, admin := range admins {
+		switch admin.Level {
+		case AdminLevelOwner:
+			owners = append(owners, admin.Nick)
+		case AdminLevelAdmin:
+			adminList = append(adminList, admin.Nick)
+		case AdminLevelVIP:
+			vips = append(vips, admin.Nick)
+		}
+	}
+
+	// Send results
+	if len(owners) > 0 {
+		a.bot.SendMessage(channel, fmt.Sprintf("Owners: %s", strings.Join(owners, ", ")))
+	}
+	if len(adminList) > 0 {
+		a.bot.SendMessage(channel, fmt.Sprintf("Admins: %s", strings.Join(adminList, ", ")))
+	}
+	if len(vips) > 0 {
+		a.bot.SendMessage(channel, fmt.Sprintf("VIPs: %s", strings.Join(vips, ", ")))
+	}
+}
+
+// HandleAdminLevel handles the !adminlevel command (Admin+ only)
+func (a *AdminCommands) HandleAdminLevel(channel, senderNick, senderHostmask, message string) {
+	// Check if sender is admin or higher
+	if a.adminStore.GetAdminLevel(senderNick, senderHostmask) < AdminLevelAdmin {
+		a.bot.SendMessage(channel, fmt.Sprintf("%s: Access denied. Admin level required.", senderNick))
+		return
+	}
+
+	// Parse command: !adminlevel [Nick]
+	parts := strings.Fields(message)
+	
+	var targetNick string
+	if len(parts) >= 2 {
+		targetNick = parts[1]
+	} else {
+		targetNick = senderNick
+	}
+
+	// Get target user's hostmask
+	targetHostmask := a.bot.GetUserHostmask(targetNick)
+	if targetHostmask == "" {
+		a.bot.SendMessage(channel, fmt.Sprintf("%s: User %s not found or not online.", senderNick, targetNick))
+		return
+	}
+
+	level := a.adminStore.GetAdminLevel(targetNick, targetHostmask)
+	levelName := a.getLevelName(level)
+	
+	if level == AdminLevelNone {
+		a.bot.SendMessage(channel, fmt.Sprintf("%s: %s has no admin privileges.", senderNick, targetNick))
+	} else {
+		a.bot.SendMessage(channel, fmt.Sprintf("%s: %s is a %s (level %d).", senderNick, targetNick, levelName, level))
+	}
+}
+
+// Helper function to get level name
+func (a *AdminCommands) getLevelName(level int) string {
+	switch level {
+	case AdminLevelOwner:
+		return "Owner"
+	case AdminLevelAdmin:
+		return "Admin"
+	case AdminLevelVIP:
+		return "VIP"
+	default:
+		return "User"
+	}
+}
+
+// ProcessCommand processes IRC commands and routes them to appropriate handlers
+func (a *AdminCommands) ProcessCommand(channel, nick, hostmask, message string) bool {
+	// Convert to lowercase for case-insensitive matching
+	lowerMessage := strings.ToLower(message)
+	
+	switch {
+	case strings.HasPrefix(lowerMessage, "!addadmin"):
+		a.HandleAddAdmin(channel, nick, hostmask, message)
+		return true
+	case strings.HasPrefix(lowerMessage, "!addvip"):
+		a.HandleAddVIP(channel, nick, hostmask, message)
+		return true
+	case strings.HasPrefix(lowerMessage, "!removeadmin"):
+		a.HandleRemoveAdmin(channel, nick, hostmask, message)
+		return true
+	case strings.HasPrefix(lowerMessage, "!listadmins"):
+		a.HandleListAdmins(channel, nick, hostmask, message)
+		return true
+	case strings.HasPrefix(lowerMessage, "!adminlevel"):
+		a.HandleAdminLevel(channel, nick, hostmask, message)
+		return true
+	default:
+		return false // Command not handled
+	}
+}

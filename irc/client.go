@@ -1,3 +1,15 @@
+// ============================================================================
+//  Szerzői jog © 2024 Markus (markus@ynm.hu)
+//  https://ynm.hu   – főoldal
+//  https://forum.ynm.hu   – hivatalos fórum
+//  https://bot.ynm.hu     – bot oldala és dokumentáció
+//
+//  Minden jog fenntartva. A kód Markus tulajdona, tilos terjeszteni vagy
+//  módosítani a szerző írásos engedélye nélkül.
+//
+//  Ez a fájl a YnM-Go IRC-bot rendszerének része.
+// ============================================================================
+
 package irc
 
 import (
@@ -6,155 +18,211 @@ import (
 	"net"
 	"strings"
 	"sync"
-	//"time"
+	"time"
+
 
 	"github.com/ynmhu/YnM-Go/config"
 )
 
+// ──────────────────────── Típusok ────────────────────────────
+
+// bejövő PRIVMSG
 type Message struct {
 	Sender  string
 	Channel string
 	Text    string
 }
 
+// fő kliens‑struktúra
 type Client struct {
-	conn      net.Conn
-	OnPong func(pongID string)
-	config    *config.Config
-	OnConnect func()
-	OnMessage func(Message)
-	mu        sync.Mutex // Írási szinkronizációhoz
-	connected bool
+	conn            net.Conn
+	config          *config.Config
+	OnConnect       func()
+	OnMessage       func(Message)
+	OnPong          func(pongID string)
+	OnLoginFailed func(reason string)
+	OnLoginSuccess func()
+	mu              sync.Mutex
+	connected       bool
+	disconnectChan  chan struct{}
+	reconnecting    bool
+	loggedIn        bool
 }
 
-// Konstruktor
+
+// ─────────────────────── Konstruktor ─────────────────────────
+
 func NewClient(cfg *config.Config) *Client {
-	return &Client{config: cfg}
+	c := &Client{
+		config:         cfg,
+		disconnectChan: make(chan struct{}, 1),
+	}
+	// reconnect‑figyelő goroutine (ha be van állítva)
+	if cfg.ReconnectOnDisconnect > 0 {
+		go c.reconnectLoop()
+	}
+	return c
 }
 
-// Kapcsolódás az IRC szerverhez
+// ─────────────────────── Kapcsolódás ─────────────────────────
+
 func (c *Client) Connect() error {
 	conn, err := net.Dial("tcp", c.config.Server)
 	if err != nil {
 		return fmt.Errorf("cannot connect to server: %w", err)
 	}
+
+	c.mu.Lock()
 	c.conn = conn
 	c.connected = true
+	c.loggedIn = false  // Itt reseteljük, hogy újra loginoljon a bot
+	c.mu.Unlock()
 
-	// Bejelentkezés
-	c.SendRaw(fmt.Sprintf("NICK %s", c.config.Nick))
-	c.SendRaw(fmt.Sprintf("USER %s 8 * :%s", c.config.User, c.config.User))
+	// IRC‑handshake
+	c.SendRaw(fmt.Sprintf("NICK %s", c.config.Nick+"_"))
+	c.SendRaw(fmt.Sprintf("USER %s YnM-Go :%s", c.config.User, c.config.User))
 
-	// Üzenetek olvasása külön goroutine-ban
+	// olvasó‑ciklus
 	go c.readLoop()
 
-	// OnConnect callback hívása, ha van
+	// callback az első sikeres csatlakozáskor
 	if c.OnConnect != nil {
 		c.OnConnect()
 	}
-
 	return nil
 }
 
-// Kapcsolat bontása
+// ─────────────────────── Leválasztás ─────────────────────────
+
 func (c *Client) Disconnect() {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	if c.conn != nil {
 		c.conn.Close()
 		c.conn = nil
-		c.connected = false
 	}
+	c.connected = false
+	c.mu.Unlock()
+
+	// jelezzük a reconnect‑ciklusnak
+	select { case c.disconnectChan <- struct{}{}: default: }
 }
 
-// Csatlakozás csatornához
+// ──────────────────── Csatorna / üzi küldése ─────────────────
+
 func (c *Client) Join(channel string) {
-	c.SendRaw(fmt.Sprintf("JOIN %s", channel))
+	c.SendRaw("JOIN " + channel)
 }
 
-// Privát üzenet küldése
 func (c *Client) SendMessage(target, text string) {
 	c.SendRaw(fmt.Sprintf("PRIVMSG %s :%s", target, text))
 }
 
-// Alacsony szintű üzenetküldés - szálbiztos
-func (c *Client) SendRaw(message string) error {
+// szálbiztos nyers küldés
+func (c *Client) SendRaw(msg string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if !c.connected || c.conn == nil {
 		return fmt.Errorf("not connected")
 	}
-
-	_, err := c.conn.Write([]byte(message + "\r\n"))
-	if err != nil {
-		return fmt.Errorf("failed to send message: %w", err)
+	_, err := c.conn.Write([]byte(msg + "\r\n"))
+	if err == nil {
+		fmt.Println(">>", msg)
 	}
-
-	fmt.Println(">>", message) // Debug log küldött üzenetekhez
-	return nil
+	return err
 }
 
-// Folyamatos olvasás a szervertől
+// ─────────────────────── Olvasó‑ciklus ───────────────────────
+
 func (c *Client) readLoop() {
 	reader := bufio.NewReader(c.conn)
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
-			// Hiba vagy kapcsolat bontás
+			// bontás → reconnect jelzés
 			c.Disconnect()
-			break
+			return
 		}
 
 		line = strings.TrimSpace(line)
-		fmt.Println("<<", line) // Debug log érkező üzenetekhez
+		fmt.Println("<<", line)
 
-		// PING üzenetre válasz PONG-gal
+		// PING → PONG
+		if strings.HasPrefix(line, "PING ") {
+			c.SendRaw(strings.Replace(line, "PING", "PONG", 1))
+			continue
+		}
+		// Auth Error
+		if strings.Contains(line, "NickServ") && strings.Contains(line, "Authentication failed") {
+			if c.OnLoginFailed != nil {
+				c.OnLoginFailed("NickServ Authentication failed: Hibás jelszó vagy nincs regisztrált fiók")
+			}
+		}
+		
+if strings.HasPrefix(line, ":NickServ!NickServ@") && strings.Contains(line, "NOTICE") && strings.Contains(line, "You're now logged in") {
+    c.mu.Lock()
+    if !c.loggedIn {
+        c.loggedIn = true
+        c.mu.Unlock()
+        if c.OnLoginSuccess != nil {
+            c.OnLoginSuccess()
+        }
+    } else {
+        c.mu.Unlock()
+    }
+}
+
+
+
+		// PONG callback
 		if strings.Contains(line, " PONG ") {
 			parts := strings.Split(line, " ")
-			if len(parts) >= 4 {
-				pongID := strings.TrimPrefix(parts[3], ":")
-				if c.OnPong != nil {
-					c.OnPong(pongID)
-				}
+			if len(parts) >= 4 && c.OnPong != nil {
+				c.OnPong(strings.TrimPrefix(parts[3], ":"))
 			}
 			continue
 		}
 
-
-		// Privát üzenet parse és callback hívás
-		if c.OnMessage != nil {
-			if msg := parseMessage(line); msg != nil {
-				c.OnMessage(*msg)
-			}
+		// PRIVMSG feldolgozás
+		if msg := parseMessage(line); msg != nil && c.OnMessage != nil {
+			c.OnMessage(*msg)
 		}
 	}
 }
 
-// Egyszerű IRC PRIVMSG üzenet feldolgozó
+// ────────────────────── Reconnect‑ciklus ─────────────────────
+
+func (c *Client) reconnectLoop() {
+	for range c.disconnectChan {
+		if c.reconnecting {
+			continue
+		}
+		c.reconnecting = true
+		time.Sleep(c.config.ReconnectOnDisconnect)
+
+		for {
+			if err := c.Connect(); err == nil {
+				c.reconnecting = false
+				break
+			}
+			// újrapróba ugyanennyi idő múlva
+			time.Sleep(c.config.ReconnectOnDisconnect)
+		}
+	}
+}
+
+// ───────────────────── PRIVMSG parser ───────────────────────
+
 func parseMessage(line string) *Message {
 	parts := strings.Split(line, " ")
 	if len(parts) < 4 || parts[1] != "PRIVMSG" {
 		return nil
 	}
 
-	sender := ""
-	if idx := strings.Index(parts[0], "!"); idx > 0 {
-		sender = parts[0][1:idx]
-	} else if len(parts[0]) > 1 {
-		sender = parts[0][1:]
-	}
-
+	sender := strings.Split(parts[0][1:], "!")[0]
 	channel := parts[2]
-	text := strings.Join(parts[3:], " ")
-	if len(text) > 0 {
-		text = text[1:] // Első karakter ':' eltávolítása
-	}
+	text := strings.TrimPrefix(strings.Join(parts[3:], " "), ":")
 
-	return &Message{
-		Sender:  sender,
-		Channel: channel,
-		Text:    text,
-	}
+	return &Message{Sender: sender, Channel: channel, Text: text}
 }
+
