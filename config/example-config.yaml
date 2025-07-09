@@ -59,3 +59,10 @@ NevnapChannels:
   
 #───────── Ping Plugin Időzitök ──────────── 
 Ping: "30s"   # felhasználói !ping parancs várakozási ideje
+
+#───────── Székelyhon Hírek Plugin ──────────── 
+SzekelyhonChannels:
+  - "#YnM"
+SzekelyhonInterval: 30m       # minden 30 percben
+SzekelyhonStartHour: 7        # reggel 7-től
+SzekelyhonEndHour: 22         # este 22-ig

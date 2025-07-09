@@ -54,6 +54,12 @@ type Config struct {
     NevnapChannels			[]string		`yaml:"NevnapChannels"`
     NevnapReggel				string			`yaml:"NevnapReggel"`
     NevnapEste					string			`yaml:"NevnapEste"`
+	
+	// Székelyhon
+	SzekelyhonChannels   []string      `yaml:"SzekelyhonChannels"`
+	SzekelyhonInterval   string        `yaml:"SzekelyhonInterval"`
+	SzekelyhonStartHour  int           `yaml:"SzekelyhonStartHour"`
+	SzekelyhonEndHour    int           `yaml:"SzekelyhonEndHour"`
 
 
 	

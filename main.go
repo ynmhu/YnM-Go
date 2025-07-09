@@ -43,6 +43,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Nem sikerült a névnap plugin inicializálása: %v", err)
 	}	
+	
+	
 
 	// ─── IRC kliens létrehozása ───────────────────────────────────────
 	bot := irc.NewClient(cfg)
@@ -88,6 +90,16 @@ func main() {
 		}
 	}()
 
+	// Székelyhon Plugin
+	interval, err := time.ParseDuration(cfg.SzekelyhonInterval)
+	if err != nil {
+		log.Fatalf("Hibás időzítés a hírekhez: %v", err)
+	}
+	szekelyhonPlugin := plugins.NewSzekelyhonPlugin(bot, cfg.SzekelyhonChannels, interval, cfg.SzekelyhonStartHour, cfg.SzekelyhonEndHour)
+	szekelyhonPlugin.Start()
+	
+	
+	
 	// ─── Eseménykezelők beállítása ────────────────────────────────────
 	var loginSuccessHandled bool
 
