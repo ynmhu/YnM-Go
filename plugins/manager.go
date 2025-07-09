@@ -1,15 +1,3 @@
-// ============================================================================
-//  Szerzői jog © 2024 Markus (markus@ynm.hu)
-//  https://ynm.hu   – főoldal
-//  https://forum.ynm.hu   – hivatalos fórum
-//  https://bot.ynm.hu     – bot oldala és dokumentáció
-//
-//  Minden jog fenntartva. A kód Markus tulajdona, tilos terjeszteni vagy
-//  módosítani a szerző írásos engedélye nélkül.
-//
-//  Ez a fájl a YnM-Go IRC-bot rendszerének része.
-// ============================================================================
-
 
 package plugins
 
@@ -22,7 +10,7 @@ type ScheduledMessage = irc.Message
 
 type Plugin interface {
     HandleMessage(msg irc.Message) string
-    OnTick() []irc.Message  // Add this required method
+    OnTick() []irc.Message
 }
 
 type Manager struct {

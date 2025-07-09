@@ -20,6 +20,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"log"
 
 	"github.com/ynmhu/YnM-Go/config"
 	"github.com/ynmhu/YnM-Go/irc"
@@ -41,8 +42,9 @@ type AdminPlugin struct {
 	userBanUntil     map[string]time.Time
 	userRequestTimes map[string][]time.Time
 	userBanNotified  map[string]bool
-	store            *AdminStore
-	currentUsers     map[string]string // nick -> full hostmask mapping
+	store            *MultiAdminStore
+	currentUsers     map[string]string 
+	hasInitialOwner bool
 }
 
 func NewAdminPlugin(cfg *config.Config) *AdminPlugin {
@@ -56,7 +58,7 @@ func NewAdminPlugin(cfg *config.Config) *AdminPlugin {
 }
 
 func (p *AdminPlugin) Initialize(bot *irc.Client) {
-	p.bot = bot
+    p.bot = bot
 	
 	// Create data directory if it doesn't exist
 	if _, err := os.Stat("data"); os.IsNotExist(err) {
@@ -66,10 +68,20 @@ func (p *AdminPlugin) Initialize(bot *irc.Client) {
 	}
 	
 	// Initialize the admin store
-	p.store = NewAdminStore("data/admins.json")
-	if err := p.store.Load(); err != nil {
-		fmt.Printf("Error loading admin store: %v\n", err)
-	}
+    p.store = NewMultiAdminStore()
+    if err := p.store.Load(); err != nil {
+        fmt.Printf("Error loading admin store: %v\n", err)
+    }
+
+    p.hasInitialOwner = p.store.HasOwner()
+}
+
+func init() {
+    log.Println("Bot starting up...")
+}
+
+func (p *AdminPlugin) GetAdminLevel(nick, hostmask string) int {
+    return p.store.GetAdminLevel(nick, hostmask)
 }
 
 func (p *AdminPlugin) HandleMessage(msg irc.Message) string {
@@ -90,36 +102,28 @@ func (p *AdminPlugin) HandleMessage(msg irc.Message) string {
 	}
 
 	cmd := parts[0]
-	fullHostmask := msg.Sender // "nick!user@host"
-	
-	// Validate hostmask format
-	//if !strings.Contains(fullHostmask, "!") {
-//		return "Invalid hostmask format"
-//	}
-	
+	fullHostmask := msg.Sender 
 	nick := strings.Split(fullHostmask, "!")[0]
 
 	// Handle !hello command (first-time setup)
 	if cmd == "!hello" {
-		if len(p.store.Admins) == 0 {
-			// Ezt használd: valódi hostmaskból származtatott *!*@host
-			host := p.store.extractHost(fullHostmask)
-			hostmask := p.store.createHostmask(host) // *!*@markus.ynm.hu
-			p.store.AddAdmin(nick, hostmask, AdminLevelOwner, "system")
+		if p.store.HasOwner() {
+			return ""
+		}
 
-			if err := p.store.Save(); err != nil {
-				return "Error saving admin status"
-			}
-			return fmt.Sprintf("%s registered as bot owner (level 3)", nick)
+		hostmask := simplifyHostmask(fullHostmask) // egyszerűsítés
+
+		info := AdminInfo{
+			Nick:     nick,
+			Hostmask: hostmask,
+			Level:    AdminLevelOwner,
+			AddedBy:  "system",
+			AddedAt:  time.Now(),
 		}
-		
-		// If user is already an admin, show their level
-		if adminLevel := p.store.GetAdminLevel(nick, fullHostmask); adminLevel > AdminLevelNone {
-			levelStr := p.getLevelString(adminLevel)
-			return fmt.Sprintf("Hello %s! You are a %s (level %d).", nick, levelStr, adminLevel)
+		if err := p.store.AddAdmin(info); err != nil {
+			return "Error saving admin data"
 		}
-		
-		return "Hello!"
+		return fmt.Sprintf("%s registered as bot owner (level 3)", nick)
 	}
 
 	// Check admin status
@@ -199,21 +203,12 @@ func (p *AdminPlugin) HandleMessage(msg irc.Message) string {
 				nick, levelStr, adminLevel, fullHostmask)
 		}
 		return fmt.Sprintf("You are %s with no admin privileges (level 0). Hostmask: %s", nick, fullHostmask)
-		
-	case "!makeowner":
-		// Temporary command to upgrade to owner - remove this after first use
-		if adminLevel >= AdminLevelAdmin && nick == "Markus" {
-			p.store.AddAdmin(nick, fullHostmask, AdminLevelOwner, "self-upgrade")
-			if err := p.store.Save(); err != nil {
-				return "Error saving admin data"
-			}
-			return "Upgraded to owner level (level 3)"
-		}
-		return "Not authorized"
 	}
 
 	return ""
 }
+
+
 
 func (p *AdminPlugin) getLevelString(level int) string {
 	switch level {
@@ -281,22 +276,31 @@ func (p *AdminPlugin) handleAddAdmin(args []string, requester string, requesterL
 	}
 	
 	// Parse hostmask if provided
-	if len(args) >= 3 {
-		hostmask = args[2]
-	} else {
-		// If no hostmask specified, try to get the user's current hostmask
-		p.mu.RLock()
-		if currentHostmask, exists := p.currentUsers[nick]; exists {
-			hostmask = currentHostmask
+		if len(args) >= 3 {
+			hostmask = args[2]
 		} else {
-			// User not found in current users, use default
-			hostmask = nick + "!*@*"
+			p.mu.RLock()
+			if currentHostmask, exists := p.currentUsers[nick]; exists {
+				hostmask = currentHostmask
+			} else {
+				// Ha nincs hostmask, inkább jelezd, hogy adják meg explicit módon
+				p.mu.RUnlock()
+				return "Hostmask missing. ex !addadmin YnM vip *!*@YnM.ynm.hu."
+			}
+			p.mu.RUnlock()
 		}
-		p.mu.RUnlock()
-	}
 	
 	// Add the admin with the determined hostmask
-	p.store.AddAdmin(nick, hostmask, level, requester)
+	info := AdminInfo{
+		Nick:     nick,
+		Hostmask: hostmask,
+		Level:    level,
+		AddedBy:  requester,
+		AddedAt:  time.Now(),
+	}
+	if err := p.store.AddAdmin(info); err != nil {
+		return "Error saving admin data"
+	}
 	if err := p.store.Save(); err != nil {
 		return "Error saving admin data"
 	}
@@ -331,7 +335,7 @@ func (p *AdminPlugin) handleDelAdmin(nick, requester string, requesterLevel int)
 }
 
 func (p *AdminPlugin) handleListAdmins() string {
-	admins := p.store.ListAdmins()
+	admins := p.store.ListAll()
 	if len(admins) == 0 {
 		return "No admins configured"
 	}
@@ -423,13 +427,37 @@ func (p *AdminPlugin) OnTick() []irc.Message {
 	return nil
 }
 
+func simplifyHostmask(fullHostmask string) string {
+	atIndex := strings.Index(fullHostmask, "@")
+	if atIndex == -1 {
+		return "*!*@*"
+	}
+	host := fullHostmask[atIndex+1:]
+	return "*!*@" + host
+}
+
+
 // Legacy method for backward compatibility
 func (p *AdminPlugin) AddAdmin(nick string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	// This method is deprecated, use the store methods instead
-	p.store.AddAdmin(nick, nick+"!*@*", AdminLevelAdmin, "legacy")
-	if err := p.store.Save(); err != nil {
-		fmt.Printf("Error saving admin data: %v\n", err)
+
+	hostmask := "*!*@*"
+	if fullHostmask, ok := p.currentUsers[nick]; ok {
+		fmt.Println("DEBUG: fullHostmask before simplify:", fullHostmask)
+		hostmask = simplifyHostmask(fullHostmask)
+		fmt.Println("DEBUG: hostmask after simplify:", hostmask)
 	}
+
+	info := AdminInfo{
+		Nick:     nick,
+		Hostmask: hostmask,
+		Level:    AdminLevelOwner,
+		AddedBy:  "system",
+		AddedAt:  time.Now(),
+	}
+
+	_ = p.store.AddAdmin(info)
+	_ = p.store.Save()
 }
+

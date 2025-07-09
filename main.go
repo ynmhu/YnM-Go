@@ -1,15 +1,3 @@
-// ============================================================================
-//  Szerzői jog © 2024 Markus (markus@ynm.hu)
-//  https://ynm.hu   – főoldal
-//  https://forum.ynm.hu   – hivatalos fórum
-//  https://bot.ynm.hu     – bot oldala és dokumentáció
-//
-//  Minden jog fenntartva. A kód Markus tulajdona, tilos terjeszteni vagy
-//  módosítani a szerző írásos engedélye nélkül.
-//
-//  Ez a fájl a YnM-Go IRC-bot rendszerének része.
-// ============================================================================
-
 package main
 
 import (
@@ -26,12 +14,14 @@ import (
 )
 
 func main() {
-
 	// ─── Konfiguráció betöltése ───────────────────────────────────────
 	cfg, err := config.Load("config/config.yaml")
 	if err != nil {
 		log.Fatalf("Config betöltési hiba: %v", err)
 	}
+
+	log.Printf("Csatornák a configból: %+v\n", cfg.Channels)
+
 	if cfg.LogDir == "" {
 		log.Fatal("Log könyvtár nincs megadva a configban!")
 	}
@@ -43,6 +33,16 @@ func main() {
 	if err := os.MkdirAll(cfg.LogDir, 0o755); err != nil {
 		log.Fatalf("Log könyvtár létrehozási hiba: %v", err)
 	}
+	
+	channels := cfg.Channels
+	if len(channels) == 0 {
+		channels = []string{"#YnM"}  
+	}
+	
+	nameDayPlugin, err := plugins.NewNameDayPlugin(cfg.NevnapChannels, cfg.NevnapReggel, cfg.NevnapEste)
+	if err != nil {
+		log.Fatalf("Nem sikerült a névnap plugin inicializálása: %v", err)
+	}	
 
 	// ─── IRC kliens létrehozása ───────────────────────────────────────
 	bot := irc.NewClient(cfg)
@@ -50,28 +50,33 @@ func main() {
 	// ─── Plugin‑kezelő ────────────────────────────────────────────────
 	pluginManager := plugins.NewManager()
 
+	// Admin plugin
+	adminPlugin := plugins.NewAdminPlugin(cfg)
+	adminPlugin.Initialize(bot)
+	pluginManager.Register(adminPlugin)
+	for _, admin := range cfg.Admins {
+		adminPlugin.AddAdmin(admin)
+	}
+
 	// Ping plugin (felhasználói !ping parancs)
 	duration, err := time.ParseDuration(cfg.PingCommandCooldown)
 	if err != nil {
 		log.Fatalf("Nem sikerült beolvasni a ping parancs cooldown időt: %v", err)
 	}
-	pingPlugin := plugins.NewPingPlugin(bot, duration)
+	pingPlugin := plugins.NewPingPlugin(bot, duration, adminPlugin)
 	bot.OnPong = func(pongID string) { pingPlugin.HandlePong(pongID) }
 	pluginManager.Register(pingPlugin)
 
 	// Névnap plugin
-	nameDayPlugin := plugins.NewNameDayPlugin([]string{"#YnM", "#Magyar"})
 	pluginManager.Register(nameDayPlugin)
 
-	// Admin plugin
-	adminPlugin := plugins.NewAdminPlugin(cfg)
-	adminPlugin.Initialize(bot)
-	pluginManager.Register(adminPlugin)
+	// Test plugin
+	testPlugin := plugins.NewTestPlugin(adminPlugin)
+	pluginManager.Register(testPlugin)
 
-	// Optionally add admins from config:
-	for _, admin := range cfg.Admins {
-		adminPlugin.AddAdmin(admin)
-	}
+	// Státusz plugin
+	statusPlugin := plugins.NewStatusPlugin(bot)
+	pluginManager.Register(statusPlugin)
 
 	// ─── Időzített névnap‑üzenetek ────────────────────────────────────
 	go func() {
@@ -84,61 +89,104 @@ func main() {
 	}()
 
 	// ─── Eseménykezelők beállítása ────────────────────────────────────
+	var loginSuccessHandled bool
 
-	// 1) Csatlakozáskor: csak console‑csatorna + NickServ azonosítás
-    bot.OnConnect = func() {
-	bot.Join(cfg.ConsoleChannel)
+	// OnConnect esemény
+	bot.OnConnect = func() {
+		log.Println("DEBUG: OnConnect - kapcsolat létrejött")
 
-	go func() {
-		// Várjunk 10 másodpercet, hogy stabil legyen a kapcsolat
-		time.Sleep(0 * time.Second)
+		go func() {
+			time.Sleep(2 * time.Second)
+			bot.Join(cfg.ConsoleChannel)
+			time.Sleep(1 * time.Second)
 
-		if cfg.AutoLogin {
-			// Ha autologin engedélyezett, indítsuk el a NickServ azonosítást
-			if err := bot.IdentifyNickServ(); err != nil {
-				log.Printf("NickServ azonosítás sikertelen: %v", err)
-			}
-		} else {
-			// Ha nincs autologin, de autojoin engedélyezett, lépjünk be a csatornákra
-			if cfg.AutoJoinWithoutLogin {
-				bot.SendMessage(cfg.ConsoleChannel, "ℹ️ Autologin kikapcsolva, de autojoin engedélyezve — csatlakozás a csatornákhoz...")
+			log.Printf("DEBUG: AutoLogin=%v, AutoJoinWithoutLogin=%v, UseSASL=%v",
+				cfg.AutoLogin, cfg.AutoJoinWithoutLogin, cfg.UseSASL)
+
+			if cfg.UseSASL {
+				bot.SendMessage(cfg.ConsoleChannel, "🔑 SASL típusú azonosítás sikeresen létrejött.")
+			} else if cfg.AutoLogin {
+				bot.SendMessage(cfg.ConsoleChannel, "🔑 NickServ azonosítás folyamatban...")
+				if err := bot.IdentifyNickServ(); err != nil {
+					log.Printf("NickServ azonosítás sikertelen: %v", err)
+				}
+			} else if cfg.AutoJoinWithoutLogin {
+				bot.SendMessage(cfg.ConsoleChannel, "ℹ️ Nincs authentication, de autojoin engedélyezve — csatlakozás a csatornákhoz...")
 				for _, ch := range cfg.Channels {
 					if ch != cfg.ConsoleChannel {
 						bot.Join(ch)
 					}
 				}
-				// Jelzés a login hiányáról is lehet itt, pl:
-				bot.SendMessage(cfg.ConsoleChannel, "⚠️ Nincs NickServ-login, így nem garantált minden funkció működése.")
+				bot.SendMessage(cfg.ConsoleChannel, "⚠️ Nincs azonosítás, így nem garantált minden funkció működése.")
+			} else {
+				bot.SendMessage(cfg.ConsoleChannel, "ℹ️ Minden automatikus funkció kikapcsolva. Csak console channelben vagyok.")
 			}
-		}
-	}()
-}
-
-	// 2) Sikeres NickServ‑login → lépjünk be a többi csatornába
-bot.OnLoginSuccess = func() {
-    log.Println("DEBUG: OnLoginSuccess called")
-    bot.SendMessage(cfg.ConsoleChannel, "✅ Sikeres NickServ‑login, csatlakozom a csatornákhoz…")
-
-    for _, ch := range cfg.Channels {
-        if ch != cfg.ConsoleChannel {
-            bot.Join(ch)
-        }
-    }
-}
-
-	// 3) Login‑hiba → jelzés a console‑csatornába
-	bot.OnLoginFailed = func(reason string) {
-		bot.SendMessage(cfg.ConsoleChannel,
-			"❌ A bot nem tudott bejelentkezni NickServ‑hez: "+reason)
+		}()
 	}
 
-	// 4) Bejövő üzenetek plugin‑kezelése + logolás
+	// OnLoginSuccess esemény
+	bot.OnLoginSuccess = func() {
+		if loginSuccessHandled {
+			log.Println("DEBUG: OnLoginSuccess - már kezelve, kihagyás")
+			return
+		}
+		loginSuccessHandled = true
+
+		log.Println("DEBUG: OnLoginSuccess - sikeres authentication, belépés a csatornákba")
+
+		if cfg.AutoJoinWithoutLogin && !cfg.AutoLogin && !cfg.UseSASL {
+			log.Println("DEBUG: OnLoginSuccess - már beléptünk autojoin_without_login-nal")
+			return
+		}
+
+		var authMethod string
+		if cfg.UseSASL {
+			authMethod = "SASL"
+		} else if cfg.AutoLogin {
+			authMethod = "NickServ"
+		} else {
+			authMethod = "sima IRC"
+		}
+
+		bot.SendMessage(cfg.ConsoleChannel, fmt.Sprintf("✅ Sikeres %s authentication, csatlakozom a csatornákhoz…", authMethod))
+
+		go func() {
+			time.Sleep(500 * time.Millisecond)
+			for _, ch := range cfg.Channels {
+				if ch != cfg.ConsoleChannel {
+					bot.Join(ch)
+				}
+			}
+		}()
+	}
+
+	// OnLoginFailed esemény
+	bot.OnLoginFailed = func(reason string) {
+		bot.SendMessage(cfg.ConsoleChannel, "❌ Authentication sikertelen: "+reason)
+
+		if cfg.AutoJoinWithoutLogin {
+			bot.SendMessage(cfg.ConsoleChannel, "ℹ️ Autojoin engedélyezve, belépés authentication nélkül...")
+			go func() {
+				time.Sleep(500 * time.Millisecond)
+				for _, ch := range cfg.Channels {
+					if ch != cfg.ConsoleChannel {
+						bot.Join(ch)
+					}
+				}
+			}()
+			bot.SendMessage(cfg.ConsoleChannel, "⚠️ Nincs authentication, így nem garantált minden funkció működése.")
+		}
+	}
+
+	// OnMessage esemény
 	bot.OnMessage = func(msg irc.Message) {
-		logMessage(msg, cfg.LogDir)
+		fmt.Printf("IRC üzenet érkezett: [%s] <%s> %s\n", msg.Channel, msg.Sender, msg.Text)
 
 		if response := pluginManager.HandleMessage(msg); response != "" {
 			bot.SendMessage(msg.Channel, response)
 		}
+
+		logMessage(msg, cfg.LogDir)
 	}
 
 	// ─── Bot indítása ────────────────────────────────────────────────

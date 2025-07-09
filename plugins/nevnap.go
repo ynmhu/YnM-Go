@@ -28,6 +28,10 @@ type NameDayPlugin struct {
     userRequestTimes map[string][]time.Time   // felhasználó lekérései időpontjai
     userBanUntil    map[string]time.Time      // felhasználói tiltások lejárati ideje
     userBanNotified map[string]bool            // jelezte-e már a tiltást
+	lastMorningAnnounce string
+	lastEveningAnnounce string
+	NevnapReggel time.Time
+    NevnapEste   time.Time
 	mu              sync.Mutex
 }
 
@@ -404,13 +408,25 @@ var nameDays = map[string][]string{
 
 
 
-func NewNameDayPlugin(channels []string) *NameDayPlugin {
+func NewNameDayPlugin(channels []string, reggelStr, esteStr string) (*NameDayPlugin, error) {
+    loc := time.Now().Location()
+    reggel, err := time.ParseInLocation("15:04", reggelStr, loc)
+    if err != nil {
+        return nil, err
+    }
+    este, err := time.ParseInLocation("15:04", esteStr, loc)
+    if err != nil {
+        return nil, err
+    }
+
     return &NameDayPlugin{
         AnnounceChannels: channels,
+        NevnapReggel:     reggel,
+        NevnapEste:       este,
         userRequestTimes: make(map[string][]time.Time),
-        userBanUntil:    make(map[string]time.Time),
-        userBanNotified: make(map[string]bool),
-    }
+        userBanUntil:     make(map[string]time.Time),
+        userBanNotified:  make(map[string]bool),
+    }, nil
 }
 
 func (p *NameDayPlugin) HandleMessage(msg irc.Message) string {
@@ -477,42 +493,53 @@ func (p *NameDayPlugin) HandleMessage(msg irc.Message) string {
 
 
 func (p *NameDayPlugin) OnTick() []irc.Message {
-    now := time.Now()
-    var messages []irc.Message
+	p.mu.Lock()
+    defer p.mu.Unlock()
+	now := time.Now()
+	todayKey := now.Format("2006-01-02")
+	var messages []irc.Message
 
-    todayNames := p.getTodaysNameDay()
-    tomorrowNames := p.getTomorrowsNameDay()
+	todayNames := p.getTodaysNameDay()
+	tomorrowNames := p.getTomorrowsNameDay()
 
-    // Reggeli bejelentés 8:00-kor
-    if now.Hour() == 8 && now.Minute() == 0 && todayNames != "" {
-        for _, channel := range p.AnnounceChannels {
-            messages = append(messages, irc.Message{
-                Channel: channel,
-                Text:    fmt.Sprintf("Ma *%s* névnapja van! Boldog névnapot! 🎉", todayNames),
-            })
-        }
-    }
+	fmt.Println("[Névnap] Tick fut:", now.Format("2006-01-02 15:04:05"))
 
-    // Esti bejelentés 20:00-kor
-    if now.Hour() == 20 && now.Minute() == 0 {
-        for _, channel := range p.AnnounceChannels {
-            if todayNames != "" {
-                messages = append(messages, irc.Message{
-                    Channel: channel,
-                    Text:    fmt.Sprintf("Ma *%s* névnapja volt.", todayNames),
-                })
-            }
-            if tomorrowNames != "" {
-                messages = append(messages, irc.Message{
-                    Channel: channel,
-                    Text:    fmt.Sprintf("Holnap *%s* névnapja lesz.", tomorrowNames),
-                })
-            }
-        }
-    }
+	// Reggeli bejelentés (pontos idő az configból, ±1 perc tolerancia)
+	if now.Hour() == p.NevnapReggel.Hour() && now.Minute() <= p.NevnapReggel.Minute()+1 && p.lastMorningAnnounce != todayKey && todayNames != "" {
+		for _, channel := range p.AnnounceChannels {
+			messages = append(messages, irc.Message{
+				Channel: channel,
+				Text:    fmt.Sprintf("Ma *%s* névnapja van! Boldog névnapot! 🎉", todayNames),
+			})
+			fmt.Printf("[Névnap] Küldés reggel %s csatornára\n", channel)
+		}
+		p.lastMorningAnnounce = todayKey
+	}
 
-    return messages
+	// Esti bejelentés (pontos idő az configból, ±1 perc tolerancia)
+	if now.Hour() == p.NevnapEste.Hour() && now.Minute() == p.NevnapEste.Minute() && p.lastEveningAnnounce != todayKey {
+		for _, channel := range p.AnnounceChannels {
+			if todayNames != "" {
+				messages = append(messages, irc.Message{
+					Channel: channel,
+					Text:    fmt.Sprintf("Ma *%s* névnapja volt.", todayNames),
+				})
+				fmt.Printf("[Névnap] Küldés este (ma) %s csatornára\n", channel)
+			}
+			if tomorrowNames != "" {
+				messages = append(messages, irc.Message{
+					Channel: channel,
+					Text:    fmt.Sprintf("Holnap *%s* névnapja lesz.", tomorrowNames),
+				})
+				fmt.Printf("[Névnap] Küldés este (holnap) %s csatornára\n", channel)
+			}
+		}
+		p.lastEveningAnnounce = todayKey
+	}
+
+	return messages
 }
+
 
 
 
@@ -627,5 +654,5 @@ func (p *NameDayPlugin) parseDate(input string) (day, month int, ok bool) {
 		return 0, 0, false
 	}
 	
-	return day, month, true
+	return month, day, true
 }

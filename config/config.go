@@ -19,23 +19,44 @@ import (
 )
 
 type Config struct {
-	Server                 string        `yaml:"server"`
-	Nick                   string        `yaml:"nick"`
-	User                   string        `yaml:"user"`
-	ConsoleChannel         string        `yaml:"console_channel"`
-	Channels               []string      `yaml:"channels"`
-	LogDir                 string        `yaml:"log_dir"`
-	ReconnectOnDisconnect  time.Duration `yaml:"reconnect_on_disconnect"`
-	PingCommandCooldown    string        `yaml:"ping_command_cooldown"`
+	Server									 string			`yaml:"Server"`
+	Port										 string 			`yaml:"Port"`   
+	NickName                  			string			`yaml:"NickName"`
+	UserName                  			string			`yaml:"UserName"`
+	RealName       						string			`yaml:"RealName"`
+	ConsoleChannel         			string			`yaml:"Console"`
+	Channels          			     []string      		`yaml:"Channels"`
+	LogDir               					string			`yaml:"LogDir"`
+	ReconnectOnDisconnect  time.Duration 	`yaml:"ReconOnDiscon"`
+	PingCommandCooldown    string       	 `yaml:"Ping"`
     // ... your existing fields ...
-    Admins []string `yaml:"admins"` 
+    Admins							 []string 			`yaml:"admins"` 
 
 	// NickServ beállítások
-	NickservBotnick        string        `yaml:"nickserv_botnick"`
-	NickservNick           string        `yaml:"nickserv_nick"`
-	NickservPass           string        `yaml:"nickserv_pass"`
-	AutoLogin              bool          `yaml:"autologin"`
-	AutoJoinWithoutLogin   bool          `yaml:"autojoin_without_login"`
+	NickservBotnick				string        `yaml:"NickservBotnick"`
+	NickservNick					string        `yaml:"NickservNick"`
+	NickservPass					string        `yaml:"NickservPass"`
+	AutoLogin						bool          `yaml:"autologin"`
+	AutoJoinWithoutLogin   	bool          `yaml:"AutoJoinWithoutLogin"`
+	
+	
+    // 🔐 ÚJ SASL mezők:
+    UseSASL						bool				`yaml:"SASL"`
+    SASLUser						string			`yaml:"SASLUser"`
+    SASLPass						string			`yaml:"SASLPass"`
+
+    // 🔒 TLS kapcsolathoz (ha még nincs benne)
+    UseTLS							bool				`yaml:"TLS"`
+    TLSCert						string			`yaml:"TLSCert"`
+    TLSKey							string			`yaml:"TLSKey"`
+	TLSPort						string			`yaml:"TLSPort"`
+	
+    NevnapChannels			[]string		`yaml:"NevnapChannels"`
+    NevnapReggel				string			`yaml:"NevnapReggel"`
+    NevnapEste					string			`yaml:"NevnapEste"`
+
+
+	
 }
 
 

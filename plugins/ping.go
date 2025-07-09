@@ -25,14 +25,15 @@ type PingPlugin struct {
     pingChannel     map[string]string
     userPingTimes   map[string][]time.Time
     userBanUntil    map[string]time.Time
-    userBanNotified map[string]bool    // ideiglenes flag, hogy jelezve lett-e már
+    userBanNotified map[string]bool
     mu              sync.Mutex
     bot             *irc.Client
     cooldown        time.Duration
+    adminPlugin     *AdminPlugin  // hozzáadva
 }
 
 // Konstruktor a PingPluginhez
-func NewPingPlugin(bot *irc.Client, cooldown time.Duration) *PingPlugin {
+func NewPingPlugin(bot *irc.Client, cooldown time.Duration, adminPlugin *AdminPlugin) *PingPlugin {
     return &PingPlugin{
         pingSentAt:      make(map[string]time.Time),
         pingChannel:     make(map[string]string),
@@ -41,6 +42,7 @@ func NewPingPlugin(bot *irc.Client, cooldown time.Duration) *PingPlugin {
         userBanNotified: make(map[string]bool),
         bot:             bot,
         cooldown:        cooldown,
+        adminPlugin:     adminPlugin,  // beállítva
     }
 }
 
@@ -50,6 +52,19 @@ func (p *PingPlugin) HandleMessage(msg irc.Message) string {
     if strings.ToLower(msg.Text) != "!ping" {
         return ""
     }
+	
+	
+	
+	// Itt nézzük az admin szintet
+    nick := strings.Split(msg.Sender, "!")[0]
+    hostmask := msg.Sender
+    level := p.adminPlugin.store.GetAdminLevel(nick, hostmask)
+
+    if level < AdminLevelAdmin { // csak admin (2) és owner (3)
+        return ""  //return "Csak admin és owner használhatja a !ping parancsot." (Ezt is válaszolhassa)
+    }
+	
+	//vége admin ellenörzése
 
     p.mu.Lock()
     defer p.mu.Unlock()

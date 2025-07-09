@@ -1,0 +1,61 @@
+# ============================================================================
+#  Szerzői jog © 2025 Markus (markus@ynm.hu)
+#  https://ynm.hu   – főoldal
+#  https://forum.ynm.hu   – hivatalos fórum
+#  https://bot.ynm.hu     – bot oldala és dokumentáció
+#
+#  Minden jog fenntartva. A kód Markus tulajdona, tilos terjeszteni vagy
+#  módosítani a szerző írásos engedélye nélkül.
+#
+#  Ez a fájl a YnM-Go IRC-bot rendszerének része.
+#============================================================================
+# ─── SSL/TLS kapcsolat (opcionális) ─────────────────────────────────
+TLS: true               # ha true, akkor TLS (SSL) kapcsolaton csatlakozik
+TLSCert: "/home/bot/ssl.cert"   # kliens tanúsítvány (opcionális, ha a szerver igényli)
+TLSKey: "/home/bot/ssl.key"    # kliens privát kulcs (opcionális)
+
+# ─── SASL kapcsolat (opcionális) ─────────────────────────────────
+SASL: true       # Kapcsold be a SASL-t
+SASLUser: "YnM-Go"        # Ez a regisztrált nick
+SASLPass: "******"      # A jelszó (tárolás titkosítva javasolt)
+
+# ─── Alap IRC ‑kapcsolat ─────────────────────────────────────────────
+Server: "192.168.0.150"       # csak cím vagy domain név, port nélkül
+Port: "6667"                  # sima TCP port
+TLSPort: "6697"              # TLS/SSL port
+
+NickName: "YnM-Go"                 # ideiglenes / végleges nick (NickServ védett)
+UserName: "YnM"               # USER parancs adatai
+RealName: "Markus Lajos"
+
+# ─── Rendszer‑/­konzolcsatorna ───────────────────────────────────────
+Console: "#YnM"        # kötelező! ide kerül minden belső log, hiba, státusz
+
+# ─── Automatikus csatlakozás további szobákhoz ───────────────────────
+Channels:
+  - "#Help"
+  - "#Magyar"
+  
+
+# ─── Naplók, reconnect, parancs‑cooldown ─────────────────────────────
+LogDir: "./logs"              # helyi mappa a naplófájloknak
+ReconOnDiscon: "60s" # automatikus újracsatlakozás 60 mp után
+
+
+# ─── NickServ azonosítás és viselkedés ──────────────────────────────
+NickservBotnick:    "NickServ"   # NickServ bot neve a hálózaton
+NickservNick:          "YnM-Go"        # a regisztrált fiók nickje
+NickservPass:          "******"      # jelszó (tárold biztonságosan!)
+
+Autologin: true          # ha false, nem próbál bejelentkezni NickServ-hez
+AutoJoinWithoutLogin: false # ha true, akkor login nélkül is belép a channels listában lévő szobákba
+
+
+#───────── NévNap Plugin Időzitök ──────────── 
+NevnapReggel:    "07:30"
+NevnapEste:         "21:30"
+NevnapChannels:
+  - "#Magyar"
+  
+#───────── Ping Plugin Időzitök ──────────── 
+Ping: "30s"   # felhasználói !ping parancs várakozási ideje
