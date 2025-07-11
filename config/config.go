@@ -9,7 +9,6 @@
 //
 //  Ez a fájl a YnM-Go IRC-bot rendszerének része.
 // ============================================================================
-
 package config
 
 import (
@@ -19,74 +18,104 @@ import (
 )
 
 type Config struct {
-	Server									 string			`yaml:"Server"`
-	Port										 string 			`yaml:"Port"`   
-	NickName                  			string			`yaml:"NickName"`
-	UserName                  			string			`yaml:"UserName"`
-	RealName       						string			`yaml:"RealName"`
-	ConsoleChannel         			string			`yaml:"Console"`
-	Channels          			     []string      		`yaml:"Channels"`
-	LogDir               					string			`yaml:"LogDir"`
-	ReconnectOnDisconnect  time.Duration 	`yaml:"ReconOnDiscon"`
-	PingCommandCooldown    string       	 `yaml:"Ping"`
-    // ... your existing fields ...
-    Admins							 []string 			`yaml:"admins"` 
+	Server               string        `yaml:"Server"`
+	Port                 string        `yaml:"Port"`
+	NickName             string        `yaml:"NickName"`
+	UserName             string        `yaml:"UserName"`
+	RealName             string        `yaml:"RealName"`
+	ConsoleChannel       string        				`yaml:"Console"`
+	Channels             							[]string      			`yaml:"Channels"`
+	LogDir               							string        			`yaml:"LogDir"`
+	ReconnectOnDisconnect				time.Duration		`yaml:"ReconOnDiscon"`
+	PingCommandCooldown  string        `yaml:"Ping"`
+	Admins               []string      `yaml:"admins"`
 
 	// NickServ beállítások
-	NickservBotnick				string        `yaml:"NickservBotnick"`
-	NickservNick					string        `yaml:"NickservNick"`
-	NickservPass					string        `yaml:"NickservPass"`
-	AutoLogin						bool          `yaml:"autologin"`
-	AutoJoinWithoutLogin   	bool          `yaml:"AutoJoinWithoutLogin"`
-	
-	
-    // 🔐 ÚJ SASL mezők:
-    UseSASL						bool				`yaml:"SASL"`
-    SASLUser						string			`yaml:"SASLUser"`
-    SASLPass						string			`yaml:"SASLPass"`
+	NickservBotnick      string `yaml:"NickservBotnick"`
+	NickservNick         string `yaml:"NickservNick"`
+	NickservPass         string `yaml:"NickservPass"`
+	AutoLogin            bool   `yaml:"autologin"`
+	AutoJoinWithoutLogin bool   `yaml:"AutoJoinWithoutLogin"`
 
-    // 🔒 TLS kapcsolathoz (ha még nincs benne)
-    UseTLS							bool				`yaml:"TLS"`
-    TLSCert						string			`yaml:"TLSCert"`
-    TLSKey							string			`yaml:"TLSKey"`
-	TLSPort						string			`yaml:"TLSPort"`
-	
-    NevnapChannels			[]string		`yaml:"NevnapChannels"`
-    NevnapReggel				string			`yaml:"NevnapReggel"`
-    NevnapEste					string			`yaml:"NevnapEste"`
-	
+	// 🔐 SASL mezők:
+	UseSASL  bool   `yaml:"SASL"`
+	SASLUser string `yaml:"SASLUser"`
+	SASLPass string `yaml:"SASLPass"`
+
+	// 🔒 TLS kapcsolathoz
+	UseTLS  bool   `yaml:"TLS"`
+	TLSCert string `yaml:"TLSCert"`
+	TLSKey  string `yaml:"TLSKey"`
+	TLSPort string `yaml:"TLSPort"`
+
+	// Névnap plugin
+	NevnapChannels []string `yaml:"NevnapChannels"`
+	NevnapReggel   string   `yaml:"NevnapReggel"`
+	NevnapEste     string   `yaml:"NevnapEste"`
+
 	// Székelyhon
-	SzekelyhonChannels   []string      `yaml:"SzekelyhonChannels"`
-	SzekelyhonInterval   string        `yaml:"SzekelyhonInterval"`
-	SzekelyhonStartHour  int           `yaml:"SzekelyhonStartHour"`
-	SzekelyhonEndHour    int           `yaml:"SzekelyhonEndHour"`
-	
-	//Viccek
+	SzekelyhonChannels  []string `yaml:"SzekelyhonChannels"`
+	SzekelyhonInterval  string   `yaml:"SzekelyhonInterval"`
+	SzekelyhonStartHour int      `yaml:"SzekelyhonStartHour"`
+	SzekelyhonEndHour   int      `yaml:"SzekelyhonEndHour"`
+
+	// Viccek
 	JokeChannels []string `yaml:"JokeChannels"`
-    JokeSendTime string   `yaml:"JokeSendTime"`
-	
-	    // Movie plugin configuration
-    JellyfinDBPath        string `yaml:"jellyfin_db_path"`
-    MovieDBPath           string `yaml:"movie_db_path"`
-    MovieRequestsChannel  string `yaml:"movie_requests_channel"`
+	JokeSendTime string   `yaml:"JokeSendTime"`
 
-
+	// Movie plugin configuration
+	JellyfinDBPath       string                `yaml:"jellyfin_db_path"`
+	MovieDBPath          string                `yaml:"movie_db_path"`
+	MovieRequestsChannel string                `yaml:"movie_requests_channel"`
+	MoviePlugin          MoviePluginConfig     `yaml:"movie_plugin"`
+	MediaAjanlat         MediaAjanlatConfig    `yaml:"media_ajanlat"`
 	
+	    MediaUpload struct {
+        Enabled         bool     `yaml:"enabled"`
+        IntervalMinutes int      `yaml:"interval_minutes"`
+        Channels        []string `yaml:"channels"`
+        JellyfinDB      string   `yaml:"jellyfin_db"`
+        SentDatesFile   string   `yaml:"sent_dates_file"`
+    } `yaml:"media_upload"`
 }
 
+type MoviePluginConfig struct {
+	PostTime string `yaml:"post_time"`
+	PostChan string `yaml:"post_chan"`
+	PostNick string `yaml:"post_nick"`
+}
 
+type MediaAjanlatConfig struct {
+	Channel string `yaml:"channel"`
+	Time    string `yaml:"time"` // formátum: "HH:MM"
+}
 
+type MediaUploadConfig struct {
+	Enabled         bool     `yaml:"enabled"`
+	Channels        []string `yaml:"channels"`
+	IntervalMinutes int      `yaml:"interval_minutes"`
+	JellyfinDB      string   `yaml:"jellyfin_db"`
+	SentDatesFile   string   `yaml:"sent_dates_file"`
+}
 
 func Load(filename string) (*Config, error) {
 	data, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return nil, err
 	}
-
 	var cfg Config
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}
-
 	return &cfg, nil
+}
+type MediaItem struct {
+	Title          string      `json:"title"`
+	Genres         string      `json:"genres"`
+	Overview       string      `json:"overview"`
+	RuntimeTicks   interface{} `json:"runtime_ticks"`
+	ProductionYear int         `json:"production_year"`
+	DateCreated    string      `json:"date_created"`
+	Path           string      `json:"path"`
+	MediaType      string      `json:"media_type"`
 }

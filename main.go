@@ -96,15 +96,24 @@ func main() {
 		bot,
 		adminPlugin,
 		cfg.JellyfinDBPath,
-		cfg.MovieDBPath, 
+		cfg.MovieDBPath,
 		cfg.MovieRequestsChannel,
+		cfg.MoviePlugin.PostTime,
+		cfg.MoviePlugin.PostChan,
+		cfg.MoviePlugin.PostNick,
 	)
 	pluginManager.Register(moviePlugin)
-
+	
 	movieRequestPlugin := plugins.NewMovieRequestPlugin(bot, adminPlugin, cfg.MovieDBPath)
 	if movieRequestPlugin != nil {
 		pluginManager.Register(movieRequestPlugin)
 		log.Printf("✅ Movie request plugin sikeresen regisztrálva")
+	}
+
+	movieCompletionPlugin := plugins.NewMovieCompletionPlugin(bot, adminPlugin, cfg.MovieDBPath)
+	if movieCompletionPlugin != nil {
+		pluginManager.Register(movieCompletionPlugin)
+		log.Printf("✅ Movie completion plugin regisztrálva (PIN teljesítés)")
 	}
 	
 	
@@ -116,6 +125,23 @@ func main() {
 		log.Printf("✅ Movie deletion plugin sikeresen regisztrálva")
 	}
 	
+	// ─── Media Upload Plugin ─────────────────────────────────────────
+	mediaUploadPlugin := plugins.NewMediaUploadPlugin(bot, cfg)
+	pluginManager.Register(mediaUploadPlugin)
+	if err := mediaUploadPlugin.Start(); err != nil {
+		log.Printf("❌ Media upload plugin indítási hiba: %v", err)
+	} else {
+		log.Printf("✅ Media upload plugin sikeresen regisztrálva és elindítva")
+	}
+	
+	// ─── Media Ajánló Plugin ──────────	
+	mediaPlugin := plugins.NewMediaAjanlatPlugin(
+		bot,
+		cfg.JellyfinDBPath,
+		cfg.MediaAjanlat.Channel,
+		cfg.MediaAjanlat.Time, // Például "19:25"
+	)
+	pluginManager.Register(mediaPlugin)
 
 	// ─── Székelyhon Plugin ─────────────────────────────────────────────
 	if cfg.SzekelyhonInterval != "" && len(cfg.SzekelyhonChannels) > 0 {
@@ -299,7 +325,7 @@ func main() {
 			log.Printf("🛑 Időzített plugin leállítva: %s", plugin.Name())
 		}
 		
-		// Movie plugin cleanup
+		// Plugin cleanup
 		for _, plugin := range pluginManager.GetPlugins() {
 			if moviePlugin, ok := plugin.(*plugins.MoviePlugin); ok {
 				moviePlugin.Close()
@@ -313,13 +339,16 @@ func main() {
 				movieDeletionPlugin.Close()
 				log.Printf("🛑 Movie deletion plugin leállítva")
 			}
-		// Graceful shutdown résznél
-		if movieRequestPlugin, ok := plugin.(*plugins.MovieRequestPlugin); ok {
-			movieRequestPlugin.Close()
-			log.Printf("🛑 Movie request plugin leállítva")
+			if movieRequestPlugin, ok := plugin.(*plugins.MovieRequestPlugin); ok {
+				movieRequestPlugin.Close()
+				log.Printf("🛑 Movie request plugin leállítva")
+			}
+			// Media upload plugin cleanup
+			if mediaUploadPlugin, ok := plugin.(*plugins.MediaUploadPlugin); ok {
+				mediaUploadPlugin.Stop()
+				log.Printf("🛑 Media upload plugin leállítva")
+			}
 		}
-		}
-		
 		
 		// Bot leállítása
 		bot.Disconnect()

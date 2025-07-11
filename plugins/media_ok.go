@@ -29,11 +29,11 @@ func NewMovieCompletionPlugin(bot *irc.Client, adminPlugin *AdminPlugin, movieDB
 
 	// Initialize database
 	if err := plugin.initializeDatabase(); err != nil {
-		log.Printf("Failed to initialize movie completion plugin database: %v", err)
+		//log.Printf("Failed to initialize movie completion plugin database: %v", err)
 		return nil
 	}
 
-	log.Printf("MovieCompletionPlugin initialized successfully")
+	//log.Printf("MovieCompletionPlugin initialized successfully")
 	return plugin
 }
 
@@ -64,7 +64,7 @@ func (p *MovieCompletionPlugin) HandleMessage(msg irc.Message) string {
     }
 
     // Naplózzuk csak a tényleges !ok parancsokat
-    log.Printf("[MovieCompletionPlugin] Command received: '%s' from '%s'", msg.Text, msg.Sender)
+   // log.Printf("[MovieCompletionPlugin] Command received: '%s' from '%s'", msg.Text, msg.Sender)
 
     // Feldolgozzuk a parancsot
     text := strings.TrimSpace(msg.Text)
@@ -89,21 +89,21 @@ func (p *MovieCompletionPlugin) handleMovieCompletion(pin string, msg irc.Messag
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
-	log.Printf("[MovieCompletionPlugin] Processing completion for PIN: %s", pin)
+	//log.Printf("[MovieCompletionPlugin] Processing completion for PIN: %s", pin)
 
 	// Get movie details
 	movie, err := p.getMovieByPIN(pin)
 	if err != nil {
-		log.Printf("[MovieCompletionPlugin] Database error: %v", err)
+		//log.Printf("[MovieCompletionPlugin] Database error: %v", err)
 		return fmt.Sprintf("Adatbázis hiba: %v", err)
 	}
 
 	if movie == nil {
-		log.Printf("[MovieCompletionPlugin] Movie not found for PIN: %s", pin)
+		//log.Printf("[MovieCompletionPlugin] Movie not found for PIN: %s", pin)
 		return fmt.Sprintf("Nincs film a(z) %s PIN-hez.", pin)
 	}
 
-	log.Printf("[MovieCompletionPlugin] Found movie: '%s' by %s, status: %s", 
+		log.Printf("[MovieCompletionPlugin] Found movie: '%s' by %s, status: %s", 
 		movie.Title, movie.RequestedBy, movie.Status)
 
 	// Check if already completed
@@ -114,11 +114,11 @@ func (p *MovieCompletionPlugin) handleMovieCompletion(pin string, msg irc.Messag
 	// Mark as completed
 	err = p.markMovieAsCompleted(pin)
 	if err != nil {
-		log.Printf("[MovieCompletionPlugin] Error marking as completed: %v", err)
+		//log.Printf("[MovieCompletionPlugin] Error marking as completed: %v", err)
 		return fmt.Sprintf("Hiba a teljesítés során: %v", err)
 	}
 
-	log.Printf("[MovieCompletionPlugin] Successfully marked PIN %s as completed", pin)
+	//log.Printf("[MovieCompletionPlugin] Successfully marked PIN %s as completed", pin)
 	
 	response := fmt.Sprintf("✅ PIN %s teljesítve! Film: '%s' (%d) - Kérő: @%s - Teljesítve: %s", 
 		pin, movie.Title, movie.Year, movie.RequestedBy, time.Now().Format("2006-01-02 15:04:05"))
@@ -129,7 +129,7 @@ func (p *MovieCompletionPlugin) handleMovieCompletion(pin string, msg irc.Messag
 func (p *MovieCompletionPlugin) initializeDatabase() error {
 	var err error
 	
-	log.Printf("[MovieCompletionPlugin] Opening database: %s", p.movieDBPath)
+	//log.Printf("[MovieCompletionPlugin] Opening database: %s", p.movieDBPath)
 	
 	p.db, err = sql.Open("sqlite3", p.movieDBPath)
 	if err != nil {
@@ -185,14 +185,14 @@ func (p *MovieCompletionPlugin) initializeDatabase() error {
 		}
 	}
 
-	log.Printf("[MovieCompletionPlugin] Database initialized successfully")
+	//log.Printf("[MovieCompletionPlugin] Database initialized successfully")
 	return nil
 }
 
 func (p *MovieCompletionPlugin) getMovieByPIN(pin string) (*MovieRequest, error) {
 	query := `SELECT id, title, pin, requested_by, year, status, upload_date, completed_date FROM movies WHERE pin = ?`
 	
-	log.Printf("[MovieCompletionPlugin] Querying database for PIN: %s", pin)
+	//log.Printf("[MovieCompletionPlugin] Querying database for PIN: %s", pin)
 	
 	row := p.db.QueryRow(query, pin)
 	
@@ -230,7 +230,7 @@ func (p *MovieCompletionPlugin) markMovieAsCompleted(pin string) error {
 	currentTime := time.Now().Format("2006-01-02 15:04:05")
 	query := `UPDATE movies SET status = 'Igen', completed_date = ? WHERE pin = ?`
 	
-	log.Printf("[MovieCompletionPlugin] Updating movie status for PIN: %s with completion date: %s", pin, currentTime)
+	//log.Printf("[MovieCompletionPlugin] Updating movie status for PIN: %s with completion date: %s", pin, currentTime)
 	
 	result, err := p.db.Exec(query, currentTime, pin)
 	if err != nil {
@@ -246,7 +246,7 @@ func (p *MovieCompletionPlugin) markMovieAsCompleted(pin string) error {
 		return fmt.Errorf("no movie found with PIN %s", pin)
 	}
 
-	log.Printf("[MovieCompletionPlugin] Successfully updated %d row(s)", rowsAffected)
+	//log.Printf("[MovieCompletionPlugin] Successfully updated %d row(s)", rowsAffected)
 	return nil
 }
 
@@ -262,13 +262,13 @@ func (p *MovieCompletionPlugin) debugMovieRecord(pin string) {
 	
 	err := row.Scan(&id, &title, &pinDB, &requestedBy, &year, &status, &uploadDate, &completedDate)
 	if err != nil {
-		log.Printf("[DEBUG] Error scanning row: %v", err)
+		//log.Printf("[DEBUG] Error scanning row: %v", err)
 		return
 	}
 	
-	log.Printf("[DEBUG] Movie record - ID: %d, Title: %s, PIN: %s, Status: %s", id, title, pinDB, status)
-	log.Printf("[DEBUG] Upload Date: %s", uploadDate)
-	log.Printf("[DEBUG] Completed Date Valid: %v, Value: '%s'", completedDate.Valid, completedDate.String)
+	//log.Printf("[DEBUG] Movie record - ID: %d, Title: %s, PIN: %s, Status: %s", id, title, pinDB, status)
+	//log.Printf("[DEBUG] Upload Date: %s", uploadDate)
+	//log.Printf("[DEBUG] Completed Date Valid: %v, Value: '%s'", completedDate.Valid, completedDate.String)
 }
 
 // Call this in your handleMovieCompletion function after marking as completed:
@@ -276,7 +276,7 @@ func (p *MovieCompletionPlugin) debugMovieRecord(pin string) {
 
 
 func (p *MovieCompletionPlugin) Close() error {
-	log.Printf("[MovieCompletionPlugin] Closing database connection")
+	//log.Printf("[MovieCompletionPlugin] Closing database connection")
 	if p.db != nil {
 		return p.db.Close()
 	}
