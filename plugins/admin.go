@@ -159,10 +159,38 @@ func (p *AdminPlugin) HandleMessage(msg irc.Message) string {
 			if err != nil {
 				return fmt.Sprintf("Config reload error: %v", err)
 			}
+
+			oldChannels := make(map[string]struct{})
+			for _, ch := range p.cfg.Channels {
+				oldChannels[ch] = struct{}{}
+			}
+
+			newChannels := make(map[string]struct{})
+			for _, ch := range newCfg.Channels {
+				newChannels[ch] = struct{}{}
+			}
+
+			// Kilépés azokról a csatornákról, amik törlődtek
+			for ch := range oldChannels {
+				if _, ok := newChannels[ch]; !ok {
+					p.bot.SendRaw("PART " + ch)
+					// vagy p.bot.Part(ch), ha van ilyen metódusod (ha nincs, implementáld)
+				}
+			}
+
+			// Belépés az új csatornákba
+			for ch := range newChannels {
+				if _, ok := oldChannels[ch]; !ok {
+					p.bot.Join(ch)
+				}
+			}
+
 			p.cfg = newCfg
-			return "Configuration reloaded successfully"
+
+			return "Configuration reloaded, channels updated"
 		}
 		return "Insufficient privileges (requires level 2)"
+
 		
 	case "!addadmin":
 		if adminLevel >= AdminLevelAdmin && len(parts) >= 2 {

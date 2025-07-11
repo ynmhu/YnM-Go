@@ -43,14 +43,15 @@ func main() {
 	if err != nil {
 		log.Fatalf("Nem sikerült a névnap plugin inicializálása: %v", err)
 	}	
-	
-	
 
 	// ─── IRC kliens létrehozása ───────────────────────────────────────
 	bot := irc.NewClient(cfg)
 
 	// ─── Plugin‑kezelő ────────────────────────────────────────────────
 	pluginManager := plugins.NewManager()
+	
+	// Külön lista az időzített pluginoknak (amelyek nem illeszkednek a meglévő rendszerhez)
+	var scheduledPlugins []ScheduledPlugin
 
 	// Admin plugin
 	adminPlugin := plugins.NewAdminPlugin(cfg)
@@ -80,26 +81,103 @@ func main() {
 	statusPlugin := plugins.NewStatusPlugin(bot)
 	pluginManager.Register(statusPlugin)
 
-	// ─── Időzített névnap‑üzenetek ────────────────────────────────────
+	// Viccek Plugin
+	jokePlugin := plugins.NewJokePlugin(bot, cfg.JokeChannels, cfg.JokeSendTime)
+	pluginManager.Register(jokePlugin)
+	jokePlugin.Start()
+
+	// Vicc plugin regisztrálása
+	viccPlugin := plugins.NewViccPlugin(bot, adminPlugin)
+	pluginManager.Register(viccPlugin)
+
+	// ─── Movie Plugin ─────────────────────────────────────────────────
+
+	moviePlugin := plugins.NewMoviePlugin(
+		bot,
+		adminPlugin,
+		cfg.JellyfinDBPath,
+		cfg.MovieDBPath, 
+		cfg.MovieRequestsChannel,
+	)
+	pluginManager.Register(moviePlugin)
+
+	movieRequestPlugin := plugins.NewMovieRequestPlugin(bot, adminPlugin, cfg.MovieDBPath)
+	if movieRequestPlugin != nil {
+		pluginManager.Register(movieRequestPlugin)
+		log.Printf("✅ Movie request plugin sikeresen regisztrálva")
+	}
+	
+	
+	
+	// ─── Movie Deletion Plugin ─────────────────────────────────────────
+	movieDeletionPlugin := plugins.NewMovieDeletionPlugin(bot, adminPlugin, cfg.MovieDBPath)
+	if movieDeletionPlugin != nil {
+		pluginManager.Register(movieDeletionPlugin)
+		log.Printf("✅ Movie deletion plugin sikeresen regisztrálva")
+	}
+	
+
+	// ─── Székelyhon Plugin ─────────────────────────────────────────────
+	if cfg.SzekelyhonInterval != "" && len(cfg.SzekelyhonChannels) > 0 {
+		interval, err := time.ParseDuration(cfg.SzekelyhonInterval)
+		if err != nil {
+			log.Fatalf("❌ Hibás Székelyhon időzítés: %v", err)
+		}
+		
+		// Validáció
+		if cfg.SzekelyhonStartHour < 0 || cfg.SzekelyhonStartHour > 23 {
+			log.Fatalf("❌ Hibás Székelyhon kezdő óra: %d (0-23 között kell lennie)", cfg.SzekelyhonStartHour)
+		}
+		if cfg.SzekelyhonEndHour < 0 || cfg.SzekelyhonEndHour > 23 {
+			log.Fatalf("❌ Hibás Székelyhon befejező óra: %d (0-23 között kell lennie)", cfg.SzekelyhonEndHour)
+		}
+		if cfg.SzekelyhonStartHour >= cfg.SzekelyhonEndHour {
+			log.Fatalf("❌ Székelyhon kezdő óra (%d) nem lehet nagyobb vagy egyenlő a befejező óránál (%d)", 
+				cfg.SzekelyhonStartHour, cfg.SzekelyhonEndHour)
+		}
+		
+		log.Printf("🔧 Székelyhon plugin inicializálás...")
+		szekelyhonPlugin := plugins.NewSzekelyhonPlugin(
+			bot, 
+			cfg.SzekelyhonChannels, 
+			interval, 
+			cfg.SzekelyhonStartHour, 
+			cfg.SzekelyhonEndHour,
+		)
+		scheduledPlugins = append(scheduledPlugins, szekelyhonPlugin)
+		log.Printf("✅ Székelyhon plugin sikeresen regisztrálva")
+	} else {
+		log.Println("ℹ️ Székelyhon plugin ki van kapcsolva (nincs konfigurálva)")
+	}
+
+	// ─── Időzített pluginok indítása ─────────────────────────────────────
+	for _, plugin := range scheduledPlugins {
+		plugin.Start()
+		log.Printf("🚀 Időzített plugin elindítva: %s", plugin.Name())
+	}
+
+	// ─── Időzített plugin ticker (névnap + egyéb OnTick pluginok) ─────────
 	go func() {
 		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+		
 		for range ticker.C {
+			// Névnap plugin OnTick
 			for _, msg := range nameDayPlugin.OnTick() {
 				bot.SendMessage(msg.Channel, msg.Text)
+			}
+			
+			// Egyéb pluginok OnTick metódusai (ha vannak)
+			for _, plugin := range pluginManager.GetPlugins() {
+				if tickablePlugin, ok := plugin.(interface{ OnTick() []plugins.ScheduledMessage }); ok {
+					for _, msg := range tickablePlugin.OnTick() {
+						bot.SendMessage(msg.Channel, msg.Text)
+					}
+				}
 			}
 		}
 	}()
 
-	// Székelyhon Plugin
-	interval, err := time.ParseDuration(cfg.SzekelyhonInterval)
-	if err != nil {
-		log.Fatalf("Hibás időzítés a hírekhez: %v", err)
-	}
-	szekelyhonPlugin := plugins.NewSzekelyhonPlugin(bot, cfg.SzekelyhonChannels, interval, cfg.SzekelyhonStartHour, cfg.SzekelyhonEndHour)
-	szekelyhonPlugin.Start()
-	
-	
-	
 	// ─── Eseménykezelők beállítása ────────────────────────────────────
 	var loginSuccessHandled bool
 
@@ -207,9 +285,48 @@ func main() {
 	}
 	defer bot.Disconnect()
 
-	// SIGINT/SIGTERM kezelés (Ctrl‑C)
+	// ─── Graceful shutdown ─────────────────────────────────────────────
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	
+	go func() {
+		<-sigChan
+		log.Println("🛑 Leállítási jel érkezett...")
+		
+		// Időzített pluginok leállítása
+		for _, plugin := range scheduledPlugins {
+			plugin.Stop()
+			log.Printf("🛑 Időzített plugin leállítva: %s", plugin.Name())
+		}
+		
+		// Movie plugin cleanup
+		for _, plugin := range pluginManager.GetPlugins() {
+			if moviePlugin, ok := plugin.(*plugins.MoviePlugin); ok {
+				moviePlugin.Close()
+				log.Printf("🛑 Movie plugin leállítva")
+			}
+			if movieCompletionPlugin, ok := plugin.(*plugins.MovieCompletionPlugin); ok {
+				movieCompletionPlugin.Close()
+				log.Printf("🛑 Movie completion plugin leállítva")
+			}
+			if movieDeletionPlugin, ok := plugin.(*plugins.MovieDeletionPlugin); ok {
+				movieDeletionPlugin.Close()
+				log.Printf("🛑 Movie deletion plugin leállítva")
+			}
+		// Graceful shutdown résznél
+		if movieRequestPlugin, ok := plugin.(*plugins.MovieRequestPlugin); ok {
+			movieRequestPlugin.Close()
+			log.Printf("🛑 Movie request plugin leállítva")
+		}
+		}
+		
+		
+		// Bot leállítása
+		bot.Disconnect()
+		os.Exit(0)
+	}()
+	
+	// Várakozás a leállítási jelre
 	<-sigChan
 }
 
@@ -233,4 +350,11 @@ func logMessage(msg irc.Message, logDir string) {
 	if _, err := file.WriteString(logLine); err != nil {
 		log.Printf("Log írási hiba: %v", err)
 	}
+}
+
+// ─── Segéd interface az időzített pluginoknak ─────────────────────────
+type ScheduledPlugin interface {
+	Start()
+	Stop()
+	Name() string
 }

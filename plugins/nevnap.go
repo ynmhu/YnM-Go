@@ -502,7 +502,6 @@ func (p *NameDayPlugin) OnTick() []irc.Message {
 	todayNames := p.getTodaysNameDay()
 	tomorrowNames := p.getTomorrowsNameDay()
 
-	fmt.Println("[Névnap] Tick fut:", now.Format("2006-01-02 15:04:05"))
 
 	// Reggeli bejelentés (pontos idő az configból, ±1 perc tolerancia)
 	if now.Hour() == p.NevnapReggel.Hour() && now.Minute() <= p.NevnapReggel.Minute()+1 && p.lastMorningAnnounce != todayKey && todayNames != "" {

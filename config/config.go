@@ -60,6 +60,15 @@ type Config struct {
 	SzekelyhonInterval   string        `yaml:"SzekelyhonInterval"`
 	SzekelyhonStartHour  int           `yaml:"SzekelyhonStartHour"`
 	SzekelyhonEndHour    int           `yaml:"SzekelyhonEndHour"`
+	
+	//Viccek
+	JokeChannels []string `yaml:"JokeChannels"`
+    JokeSendTime string   `yaml:"JokeSendTime"`
+	
+	    // Movie plugin configuration
+    JellyfinDBPath        string `yaml:"jellyfin_db_path"`
+    MovieDBPath           string `yaml:"movie_db_path"`
+    MovieRequestsChannel  string `yaml:"movie_requests_channel"`
 
 
 	

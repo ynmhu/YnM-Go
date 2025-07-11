@@ -1,16 +1,14 @@
-
 package plugins
 
 import (
 	"github.com/ynmhu/YnM-Go/irc"
-
 )
 
 type ScheduledMessage = irc.Message
 
 type Plugin interface {
-    HandleMessage(msg irc.Message) string
-    OnTick() []irc.Message
+	HandleMessage(msg irc.Message) string
+	OnTick() []irc.Message
 }
 
 type Manager struct {
@@ -34,4 +32,9 @@ func (m *Manager) HandleMessage(msg irc.Message) string {
 		}
 	}
 	return ""
+}
+
+// Új metódus: plugin lista lekérése (pl. OnTick hívásokhoz)
+func (m *Manager) GetPlugins() []Plugin {
+	return m.plugins
 }
