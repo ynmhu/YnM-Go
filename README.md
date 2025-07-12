@@ -4,26 +4,29 @@ Egy erőteljes, moduláris IRC-bot Go nyelven, Sopel-szerű pluginrendszerrel. K
 
 ## Főbb jellemzők
 
-✅ Modularitás pluginokkal
-✅ Könnyen bővíthető új parancsokkal
-✅ Gyors, stabil Go-alapú IRC kapcsolat
-✅ Naplózás, adatbázis, JSON és statikus fájltámogatás
+✅ Modularitás pluginokkal  
+✅ Könnyen bővíthető új parancsokkal  
+✅ Gyors, stabil Go-alapú IRC kapcsolat  
+✅ Naplózás, adatbázis, JSON és statikus fájltámogatás  
+✅ Beépített **médiaajánló és fájlfigyelő rendszer** Jellyfin integrációval
 
 ## Alapból elérhető funkciók
 
-* 📊 **Resource monitor** – CPU, memória, load
-* 🧍 **Névnap értesítő** – napi névnapok
-* ☁️ **Időjárás** – aktuális állapot (API-val vagy `wttr.in`)
-* 🔍 **Google keresés** – `!google valami`
-* 📽️ **Film ajánló** – random, országos vagy népszerű film
-* 😂 **Vicc plugin** – napi poén vagy random
-* 🎬 **Film kérés** – felhasználói filmkérés kezelése
-* 📆 **Seen plugin** – utoljára látott idő IRC-n
-* 📡 **RSS olvasó** – hírek, saját feed-ekből
-* 💬 **Info / help** – használati utasítások
-* 💻 **Shell parancsok** – biztonságosan előre definiált parancsok
-* 🎮 **XP rendszer** – felhasználók aktivitásalapú szintlépése
-* 🔔 **Push értesítések** – szolgáltatások állapota (pl. Jellyfin down)
+* 📊 **Resource monitor** – CPU, memória, load  
+* 🧍 **Névnap értesítő** – napi névnapok  
+* ☁️ **Időjárás** – aktuális állapot (API-val vagy `wttr.in`)  
+* 🔍 **Google keresés** – `!google valami`  
+* 📽️ **Film ajánló** – random, országos vagy népszerű film  
+* 🎬 **Médiaajánló** – legfrissebb feltöltött film/sorozat ajánlása  
+* ⬆️ **Médiafeltöltés figyelő** – Jellyfin adatbázisból automatikusan kiküldi az új tartalmakat  
+* 📝 **Média kérés** – felhasználók által kért filmek nyilvántartása  
+* 😂 **Vicc plugin** – napi poén vagy random  
+* 📆 **Seen plugin** – utoljára látott idő IRC-n  
+* 📡 **RSS olvasó** – hírek, saját feed-ekből  
+* 💬 **Info / help** – használati utasítások  
+* 💻 **Shell parancsok** – biztonságosan előre definiált parancsok  
+* 🎮 **XP rendszer** – felhasználók aktivitásalapú szintlépése  
+* 🔔 **Push értesítések** – szolgáltatások állapota (pl. Jellyfin down)  
 * 🔧 **Szolgáltatásfigyelés** – portok, szolgáltatások uptime-ja
 
 ## Telepítés
@@ -43,20 +46,43 @@ YnM-Go/
 
 ├── config
 │   ├── config.go
-│   └── config.yaml
+│   ├── config.yaml
+│   └── example-config.yaml
+├── data
+│   ├── admins.json
+│   ├── joke_status.json
+│   ├── movies.db
+│   ├── owners.json
+│   ├── sent_dates.json
+│   └── vips.json
 ├── go.mod
 ├── go.sum
 ├── irc
 │   └── client.go
 ├── logs
-│   ├── #YnM_2025-07-05.log
-│   └── #YnM_2025-07-06.log
 ├── main.go
 ├── plugins
+│   ├── admin.go
+│   ├── admin_store.go
 │   ├── manager.go
+│   ├── media_ajanlo.go
+│   ├── media_del.go
+│   ├── media_kell.go
+│   ├── media_keresek.go
+│   ├── media_ok.go
+│   ├── media_upload.go
+│   ├── models.go
+│   ├── Napi_vicc.go
 │   ├── nevnap.go
-│   └── ping.go
+│   ├── ping.go
+│   ├── status.go
+│   ├── szekelyhon.go
+│   ├── teszt.go
+│   ├── utils.go
+│   └── vicc.go
+├── README.md
 └── YnM-Go
+
 
 ```
 
@@ -154,14 +180,6 @@ media_upload:
   sent_dates_file: "./data/sent_dates.json"
 
 
-```
-
-## Feltöltés GitHubra
-
-```bash
-git add .
-git commit -m "Új plugin: vicc"
-git push origin main
 ```
 
 ---
