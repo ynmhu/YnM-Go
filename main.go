@@ -13,6 +13,7 @@ import (
 	"github.com/ynmhu/YnM-Go/plugins"
 )
 
+
 func main() {
 	// ─── Konfiguráció betöltése ───────────────────────────────────────
 	cfg, err := config.Load("config/config.yaml")
@@ -34,6 +35,10 @@ func main() {
 		log.Fatalf("Log könyvtár létrehozási hiba: %v", err)
 	}
 	
+	// ─── IRC kliens létrehozása ───────────────────────────────────────
+	bot := irc.NewClient(cfg)
+
+
 	channels := cfg.Channels
 	if len(channels) == 0 {
 		channels = []string{"#YnM"}  
@@ -43,10 +48,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("Nem sikerült a névnap plugin inicializálása: %v", err)
 	}	
-
-	// ─── IRC kliens létrehozása ───────────────────────────────────────
-	bot := irc.NewClient(cfg)
-
+    
+	
+	
 	// ─── Plugin‑kezelő ────────────────────────────────────────────────
 	pluginManager := plugins.NewManager()
 	
@@ -72,7 +76,11 @@ func main() {
 
 	// Névnap plugin
 	pluginManager.Register(nameDayPlugin)
-
+	
+	// Ora Plugin
+	oraPlugin := plugins.NewOraPlugin(bot, adminPlugin, cfg)
+	pluginManager.Register(oraPlugin)
+	
 	// Test plugin
 	testPlugin := plugins.NewTestPlugin(adminPlugin)
 	pluginManager.Register(testPlugin)

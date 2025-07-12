@@ -77,6 +77,12 @@ type Config struct {
         JellyfinDB      string   `yaml:"jellyfin_db"`
         SentDatesFile   string   `yaml:"sent_dates_file"`
     } `yaml:"media_upload"`
+
+	//Ora Reminder
+	OraChan     []string `yaml:"orachan"`
+	OraDatesFile string  `yaml:"ora_dates_file"`
+	OraDBFile    string  `yaml:"ora_db_file"`
+
 }
 
 type MoviePluginConfig struct {

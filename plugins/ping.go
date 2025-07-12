@@ -60,7 +60,7 @@ func (p *PingPlugin) HandleMessage(msg irc.Message) string {
     hostmask := msg.Sender
     level := p.adminPlugin.store.GetAdminLevel(nick, hostmask)
 
-    if level < AdminLevelAdmin { // csak admin (2) és owner (3)
+    if level < 1 { // csak admin (2) és owner (3)
         return ""  //return "Csak admin és owner használhatja a !ping parancsot." (Ezt is válaszolhassa)
     }
 	
