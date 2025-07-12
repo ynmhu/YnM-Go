@@ -30,6 +30,7 @@ import (
 // bejövő PRIVMSG
 type Message struct {
 	Sender  string
+	Nick    string // ⬅️ ez az új mező
 	Channel string
 	Text    string
 }
@@ -588,7 +589,6 @@ func parseMessage(line string) *Message {
 		return nil
 	}
 
-	// sender legyen az egész hostmask: nick!user@host
 	sender := parts[0]
 	if strings.HasPrefix(sender, ":") {
 		sender = sender[1:]
@@ -597,8 +597,12 @@ func parseMessage(line string) *Message {
 	channel := parts[2]
 	text := strings.TrimPrefix(strings.Join(parts[3:], " "), ":")
 
+	// Nick kinyerése a sender‑ből: nick!user@host
+	nick := strings.SplitN(sender, "!", 2)[0]
+
 	return &Message{
 		Sender:  sender,
+		Nick:    nick,
 		Channel: channel,
 		Text:    text,
 	}

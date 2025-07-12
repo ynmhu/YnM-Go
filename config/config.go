@@ -26,6 +26,7 @@ type Config struct {
 	ConsoleChannel       string        				`yaml:"Console"`
 	Channels             							[]string      			`yaml:"Channels"`
 	LogDir               							string        			`yaml:"LogDir"`
+	DataDir 										string 					`yaml:"data_dir"`
 	ReconnectOnDisconnect				time.Duration		`yaml:"ReconOnDiscon"`
 	PingCommandCooldown  string        `yaml:"Ping"`
 	Admins               []string      `yaml:"admins"`
@@ -82,6 +83,9 @@ type Config struct {
 	OraChan     []string `yaml:"orachan"`
 	OraDatesFile string  `yaml:"ora_dates_file"`
 	OraDBFile    string  `yaml:"ora_db_file"`
+	
+	//Tama
+	 DataDirectory string `json:"data_directory"`
 
 }
 
