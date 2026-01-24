@@ -221,15 +221,32 @@ func (c *Client) handleRawMessage(line string, receivedTime time.Time) {
 
 		// max logolj, de NE állíts undernetLoggedIn-t és NE joinolj itt
 		log.Printf("[DEBUG] undernet login hint: %s", line)
-		return
+
 	}
     
-    // ⚠️ ÚJ: NOTICE kezelése (NickServ gyakran NOTICE-szal válaszol)
-    if strings.Contains(line, " NOTICE ") {
-        if c.handleNickServNotice(line) {
-            return
-        }
-    }
+	// ⚠️ NOTICE kezelése
+	if strings.Contains(line, " NOTICE ") {
+
+		// ✅ Undernet X login siker (NOTICE-ból!)
+		// példa line: :X!cservice@undernet.org NOTICE YnM-Go :AUTHENTICATION SUCCESSFUL as YnM
+		if strings.HasPrefix(line, ":X!") &&
+			strings.Contains(line, " NOTICE ") &&
+			strings.Contains(line, " AUTHENTICATION SUCCESSFUL ") {
+
+			c.mu.Lock()
+			c.undernetLoggedIn = true
+			c.mu.Unlock()
+
+			log.Printf("✅ Undernet X login detected (NOTICE) -> joining all channels")
+			go c.joinAllChannels()
+			// itt nyugodtan return-ölhetsz, nehogy mást is kezeljen ugyanarra a sorra
+			return
+		}
+
+		if c.handleNickServNotice(line) {
+			return
+		}
+	}
 
     // ========== NUMERIC RESPONSES ==========
     // Ezek MIND return-olnak, így nem zavarják a user MODE-okat
