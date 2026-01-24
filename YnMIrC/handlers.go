@@ -657,53 +657,61 @@ func (c *Client) handleJoin(line string) {
     }
 }
 func (c *Client) joinAllChannels() {
-  //  log.Println("🔍 DEBUG: joinAllChannels() meghívva")
-    
-    // ⚠️ KRITIKUS VÉDELEM: Ellenőrizzük az azonosítást
-    c.mu.RLock()
-    isAuthenticated := c.undernetLoggedIn
-    undernetEnabled := c.config.Undernet.Enabled
-    isLoggedIn := c.loggedIn
-    c.mu.RUnlock()
-    
-    if undernetEnabled && !isAuthenticated {
-       // log.Println("🔒 VÉDELEM: Undernet enabled, de még NINCS azonosítva - kihagyom a csatornákba lépést!")
-        return
-    }
-    
-    if !undernetEnabled && !isLoggedIn {
-      //  log.Println("🔒 VÉDELEM: Még NINCS bejelentkezve - kihagyom a csatornákba lépést!")
-        return
-    }
-    
-    // ⚠️ ÚJ: Undernet esetén várjuk meg a handleWelcome-t is
-    if undernetEnabled && !isLoggedIn {
-        log.Println("🔒 VÉDELEM: Undernet OK, de handleWelcome még nem futott le - várok 5 másodpercet...")
-        time.Sleep(5 * time.Second)
+    // Várjuk meg a szükséges állapotokat, ne return-öljünk rögtön.
+    deadline := time.Now().Add(20 * time.Second)
+
+    for {
         c.mu.RLock()
-        isLoggedIn = c.loggedIn
+        undernetEnabled := c.config.Undernet.Enabled
+        isAuthenticated := c.undernetLoggedIn
+        isLoggedIn := c.loggedIn
         c.mu.RUnlock()
-        if !isLoggedIn {
-            log.Println("🔒 VÉDELEM: handleWelcome még mindig nem futott - kihagyom!")
+
+        ready := isLoggedIn && (!undernetEnabled || isAuthenticated)
+        if ready {
+            break
+        }
+
+        if time.Now().After(deadline) {
+            log.Printf("🔒 joinAllChannels: timeout (loggedIn=%v undernetEnabled=%v undernetLoggedIn=%v)",
+                isLoggedIn, undernetEnabled, isAuthenticated)
             return
         }
+
+        time.Sleep(500 * time.Millisecond)
     }
-    
-    //log.Printf("✅ Azonosítás OK, belépés %d csatornába...\n", len(c.config.Channels))
-    
+
     time.Sleep(1 * time.Second)
-    
-		for i, channel := range c.config.Channels {
-			if c.config.ConsoleChannel != "" && strings.EqualFold(channel, c.config.ConsoleChannel) {
-				continue
-			}
-			log.Printf("📍 Joining channel %d/%d: %s\n", i+1, len(c.config.Channels), channel)
-			c.Join(channel)
-			time.Sleep(500 * time.Millisecond)
-		}
-			
-    //log.Println("✅ Összes csatornába belépve")
-    //c.SendMessage(c.config.ConsoleChannel, "✅ Sikeresen beléptem az összes csatornába.")
+
+    // Join minden csatornába, beleértve a ConsoleChannel-t is,
+    // a lista duplikációját kiszűrjük.
+    joined := make(map[string]bool)
+
+    for i, channel := range c.config.Channels {
+        ch := strings.TrimSpace(channel)
+        if ch == "" {
+            continue
+        }
+        key := strings.ToLower(ch)
+        if joined[key] {
+            continue
+        }
+        joined[key] = true
+
+        log.Printf("📍 Joining channel %d/%d: %s", i+1, len(c.config.Channels), ch)
+        c.Join(ch)
+        time.Sleep(500 * time.Millisecond)
+    }
+
+    // Ha a ConsoleChannel nincs benne a Channels listában, akkor is menjünk be oda.
+    if c.config.ConsoleChannel != "" {
+        cc := strings.TrimSpace(c.config.ConsoleChannel)
+        key := strings.ToLower(cc)
+        if cc != "" && !joined[key] {
+            log.Printf("📍 Joining ConsoleChannel: %s", cc)
+            c.Join(cc)
+        }
+    }
 }
 // Handle Chan MODE
 func (c *Client) handleChannelModeIs(line string) {
