@@ -1281,12 +1281,14 @@ func (c *Client) handleEndOfWho(line string) {
 }
 
 func (c *Client) handleEndOfWhois(line string) {
+    line = stripIRCTags(line)
+
     parts := strings.Fields(line)
     if len(parts) < 4 {
         return
     }
 
-    nickKey := strings.ToLower(parts[3])
+    nickKey := strings.ToLower(strings.TrimSpace(parts[3]))
 
     c.whoisMutex.Lock()
     data := c.whoisData[nickKey]
@@ -1295,14 +1297,17 @@ func (c *Client) handleEndOfWhois(line string) {
     delete(c.whoisChannels, nickKey)
     c.whoisMutex.Unlock()
 
-    if chans != nil {
-        for _, ch := range chans {
-            select {
-            case ch <- data:
-            default:
-            }
-            close(ch)
+    if data == nil {
+        log.Printf("[WHOIS] Missing 311 data for %s, line=%q", nickKey, line)
+        data = &WhoisData{Nick: parts[3]}
+    }
+
+    for _, ch := range chans {
+        select {
+        case ch <- data:
+        default:
         }
+        close(ch)
     }
 }
 
