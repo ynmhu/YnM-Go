@@ -227,11 +227,9 @@ func (c *Client) handleRawMessage(line string, receivedTime time.Time) {
 	// ⚠️ NOTICE kezelése
 	if strings.Contains(line, " NOTICE ") {
 
-		// ✅ Undernet X login siker (NOTICE-ból!)
-		// példa line: :X!cservice@undernet.org NOTICE YnM-Go :AUTHENTICATION SUCCESSFUL as YnM
 		if strings.HasPrefix(line, ":X!") &&
 			strings.Contains(line, " NOTICE ") &&
-			strings.Contains(line, " AUTHENTICATION SUCCESSFUL ") {
+			strings.Contains(line, "AUTHENTICATION SUCCESSFUL") {
 
 			c.mu.Lock()
 			c.undernetLoggedIn = true
@@ -239,7 +237,6 @@ func (c *Client) handleRawMessage(line string, receivedTime time.Time) {
 
 			log.Printf("✅ Undernet X login detected (NOTICE) -> joining all channels")
 			go c.joinAllChannels()
-			// itt nyugodtan return-ölhetsz, nehogy mást is kezeljen ugyanarra a sorra
 			return
 		}
 
@@ -254,6 +251,18 @@ func (c *Client) handleRawMessage(line string, receivedTime time.Time) {
     case strings.Contains(line, " 433 ") || strings.Contains(strings.ToUpper(line), "NICKNAME_RESERVED"):
         c.handleNickInUse()
         return
+		
+		case strings.Contains(line, " 396 "):
+			low := strings.ToLower(line)
+			my := strings.ToLower(c.nick)
+			if strings.Contains(low, " 396 "+my+" ") {
+				c.mu.Lock()
+				c.undernetLoggedIn = true
+				c.mu.Unlock()
+				log.Printf("✅ Hidden host ready (396) -> joining all channels")
+				go c.joinAllChannels()
+			}
+			return
 
     case strings.Contains(line, " 001 "):
         c.handleWelcome()
