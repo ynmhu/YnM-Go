@@ -225,7 +225,7 @@ func (c *Client) handleRawMessage(line string, receivedTime time.Time) {
 	}
     
 
-	// ⚠️ NOTICE kezelése
+
 	if strings.Contains(line, " NOTICE ") {
 
 		if strings.HasPrefix(line, ":X!") &&
@@ -235,12 +235,7 @@ func (c *Client) handleRawMessage(line string, receivedTime time.Time) {
 			c.undernetLoggedIn = true
 			c.mu.Unlock()
 
-			if c.OnLoginSuccess != nil {
-				c.OnLoginSuccess()
-			}
-
-			log.Printf("✅ Undernet X login detected (NOTICE) -> joining all channels")
-			go c.joinAllChannels()
+			log.Printf("✅ Undernet X auth OK (NOTICE). Waiting for 396 hidden host before joining.")
 			return
 		}
 
@@ -260,8 +255,17 @@ func (c *Client) handleRawMessage(line string, receivedTime time.Time) {
 		low := strings.ToLower(line)
 		my := strings.ToLower(c.nick)
 		if strings.Contains(low, " 396 "+my+" ") {
-			log.Printf("✅ Hidden host ready (396)")
+
+			// 1) itt már rejtett host -> most lépünk be mindenhova
 			go c.joinAllChannels()
+
+			// 2) és csak ezután jelezzük a login sikert (kicsi késleltetéssel)
+			go func() {
+				time.Sleep(2 * time.Second)
+				if c.OnLoginSuccess != nil {
+					c.OnLoginSuccess()
+				}
+			}()
 		}
 		return
 
@@ -556,11 +560,6 @@ func (c *Client) handleWelcome() {
             c.IdentifyNickServ()
         }
     }()
-
-    // ✅ Indítsuk el a join folyamatot 001 után:
-    // - Undernet ON: vár X-auth-ra, 15s után console-only
-    // - Undernet OFF: belép az összes csatornába
-    go c.joinAllChannels()
 }
 
 
