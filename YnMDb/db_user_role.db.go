@@ -40,11 +40,6 @@ func normalizeHostmask(hostmask string) string {
 
 func (a *AdminDB) GetUserRoleInChannel(nick, hostmask, channel string) (string, error) {
     
-    // ✅ 1. CACHE ELLENŐRZÉS
-    if cachedRole, found := a.getCachedRole(nick, channel); found {
-        return cachedRole, nil
-    }
-    
     normalizedHost := normalizeHostmask(hostmask)
     
     // ========== SZERVER HOSTMASKEK KISZŰRÉSE ==========
@@ -59,7 +54,7 @@ func (a *AdminDB) GetUserRoleInChannel(nick, hostmask, channel string) (string, 
     
     var roles []string
     
-    // ========== 2. GLOBÁLIS ROLE (users tábla) ==========
+    // ========== 1. GLOBÁLIS ROLE (users tábla) ==========
     queryGlobal := `
         SELECT role
         FROM users
@@ -90,10 +85,11 @@ func (a *AdminDB) GetUserRoleInChannel(nick, hostmask, channel string) (string, 
         fmt.Printf("[DEBUG] Error getting global role: %v\n", err)
     }
     
-    // ========== 3. LOKÁLIS ROLE (channel_users tábla) ==========
+    // ========== 2. LOKÁLIS ROLE (channel_users tábla) ==========
     var localRole string
     
     if channel != "" {
+        // CSAK EGY CSATORNÁBAN keresünk
         queryChannel := `
             SELECT role
             FROM channel_users
@@ -118,6 +114,7 @@ func (a *AdminDB) GetUserRoleInChannel(nick, hostmask, channel string) (string, 
             }
         }
     } else {
+        // ÜRES CSATORNA -> ÖSSZES CSATORNÁBÓL keresünk a LEGMAGASABBAT
         queryAllChannels := `
             SELECT role
             FROM channel_users
@@ -149,7 +146,7 @@ func (a *AdminDB) GetUserRoleInChannel(nick, hostmask, channel string) (string, 
         }
     }
     
-    // ========== 4. LEGMAGASABB ROLE KIVÁLASZTÁSA ==========
+    // ========== 3. LEGMAGASABB ROLE KIVÁLASZTÁSA ==========
     if YnMModule.ShouldDebugForHostmask(normalizedHost) {
         fmt.Printf("[DEBUG] All found roles: %v\n", roles)
     }
@@ -158,11 +155,10 @@ func (a *AdminDB) GetUserRoleInChannel(nick, hostmask, channel string) (string, 
         if YnMModule.ShouldDebugForHostmask(normalizedHost) {
             fmt.Printf("[DEBUG] No roles found, returning empty\n")
         }
-        // ✅ CACHE ÜRES EREDMÉNY IS (hogy ne kelljen mindig query-zni)
-        a.setCachedRole(nick, channel, "")
         return "", nil
     }
     
+    // Role hierarchia
     roleHierarchy := map[string]int{
         "owner": 5,
         "admin": 4,
@@ -188,7 +184,6 @@ func (a *AdminDB) GetUserRoleInChannel(nick, hostmask, channel string) (string, 
     }
     
     if highestRole == "" {
-        a.setCachedRole(nick, channel, "")
         return "", nil
     }
     
@@ -196,11 +191,9 @@ func (a *AdminDB) GetUserRoleInChannel(nick, hostmask, channel string) (string, 
         fmt.Printf("[DEBUG] Returning highest role: %s (level: %d)\n", highestRole, highestLevel)
     }
     
-    // ✅ CACHE SIKERES EREDMÉNY
-    a.setCachedRole(nick, channel, highestRole)
-    
     return highestRole, nil
 }
+
 func (a *AdminDB) GetUserRoleWithModes(nick, hostmask, channel string) (*UserRoleWithModes, error) {
     // 1. Először role lekérdezése (a meglévő logikával)
     role, err := a.GetUserRoleInChannel(nick, hostmask, channel)

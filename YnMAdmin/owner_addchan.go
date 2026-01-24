@@ -16,8 +16,7 @@ import (
 	"fmt"
 	"strings"
 	"log"
-	"time"
-	"sync"
+//	"time"
 
 	"git.ynm.hu/markus/YnM-Go/YnMModule"
 	"git.ynm.hu/markus/YnM-Go/YnMLang"
@@ -131,91 +130,88 @@ func (p *YnmAdminPlugin) onEndOfWho(channel string) {
     p.sendChannelsWithPrefixes(replyTo)
 }
 
-func (p *YnmAdminPlugin) sendChannelsWithPrefixes(issuingChannel string) {
-    channels, err := p.Db.GetAllChannels()
-    if err != nil || len(channels) == 0 {
-        p.Bot.SendRaw(fmt.Sprintf("PRIVMSG %s :Nincs csatorna adat.", issuingChannel))
+func (p *YnmAdminPlugin) sendChannelsWithPrefixes(target string) {
+    channels := p.Bot.GetChannels()
+    if len(channels) == 0 {
+        p.Bot.SendMessage(target, "A bot jelenleg nincs csatornában.")
         return
     }
 
-    out := make([]string, 0, len(channels))
+    botNick := p.Bot.GetNick()
+    var channelList []string
+
     for _, ch := range channels {
-        prefix := p.Bot.GetMyPrefix(ch)
-        if prefix == "" {
-            prefix = "-"
+        prefix := p.getBotPrefixInChannel(ch, botNick)
+        
+        if prefix != "" {
+            channelList = append(channelList, fmt.Sprintf("%s(%s)", ch, prefix))
+        } else {
+            channelList = append(channelList, fmt.Sprintf("%s(-)", ch))
         }
-        out = append(out, fmt.Sprintf("%s(%s)", ch, prefix))
     }
 
-    p.Bot.SendRaw(fmt.Sprintf("PRIVMSG %s :A bot jelenlegi csatornái: %s", issuingChannel, strings.Join(out, ", ")))
+    msg := fmt.Sprintf("A bot jelenlegi csatornái: %s", strings.Join(channelList, ", "))
+    p.Bot.SendMessage(target, msg)
 }
 // HandleChannelsCommand kezeli az !channels parancsot (csak owner)
 func (p *YnmAdminPlugin) handleChannelsCommand(sender, issuingChannel string) string {
-	nick := strings.Split(sender, "!")[0]
-	replyTo := strings.TrimSpace(issuingChannel)
-	if replyTo == "" {
-		replyTo = nick
-	}
+    nick := strings.Split(sender, "!")[0]
+    replyTo := strings.TrimSpace(issuingChannel)
+    if replyTo == "" {
+        replyTo = nick
+    }
 
-	hostmask := YnMModule.SimplifyHostmask(sender)
-	info, err := p.Db.GetUserInfoByHost(hostmask)
-	if err != nil || info == nil {
-		return ""
-	}
-	if info.Role != "owner" {
-		return ""
-	}
+    hostmask := YnMModule.SimplifyHostmask(sender)
+    info, err := p.Db.GetUserInfoByHost(hostmask)
+    if err != nil || info == nil {
+        return ""
+    }
+    if info.Role != "owner" {
+        return ""
+    }
 
-	channels, err := p.Db.GetAllChannels()
-	if err != nil {
-		p.Bot.SendRaw(fmt.Sprintf("PRIVMSG %s :Hiba a csatornák lekérdezésekor: %s", replyTo, err.Error()))
-		return ""
-	}
+    channels, err := p.Db.GetAllChannels()
+    if err != nil {
+        p.Bot.SendRaw(fmt.Sprintf("PRIVMSG %s :Hiba a csatornák lekérdezésekor: %s", replyTo, err.Error()))
+        return ""
+    }
 
-	if len(channels) == 0 {
-		p.Bot.SendRaw(fmt.Sprintf("PRIVMSG %s :A bot jelenleg nincs egyetlen csatornában sem.", replyTo))
-		return ""
-	}
+    if len(channels) == 0 {
+        p.Bot.SendRaw(fmt.Sprintf("PRIVMSG %s :A bot jelenleg nincs egyetlen csatornában sem.", replyTo))
+        return ""
+    }
 
-	// ✅ JAVÍTÁS: Nincs szükség type assertion-re
-	needsRefresh := false
-	
-	for _, ch := range channels {
-		if !p.Bot.IsWhoCacheFresh(ch, 10*time.Second) {
-			needsRefresh = true
-			break
-		}
-	}
-	
-	if !needsRefresh {
-		// Cache is fresh, instant response
-		p.sendChannelsWithPrefixes(replyTo)
-		return ""
-	}
+    // ✅ AZONNALI VÁLASZ - WHO NÉLKÜL!
+    // A prefix már a NAMES-ből jön, amikor JOIN-oltunk
+    p.sendChannelsWithPrefixes(replyTo)
+    return ""
+}
 
-	// ✅ WHO refresh
-	var wg sync.WaitGroup
-	for i, ch := range channels {
-		wg.Add(1)
-		
-		go func(channel string, delay int) {
-			defer wg.Done()
-			time.Sleep(time.Duration(delay) * 150 * time.Millisecond)
-			p.Bot.WaitForWhoResponse(channel, 2*time.Second)
-		}(ch, i)
-	}
-	
-	done := make(chan bool)
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-	
-	select {
-	case <-done:
-	case <-time.After(10 * time.Second):
-	}
-	
-	p.sendChannelsWithPrefixes(replyTo)
-	return ""
+// ===== 2. JAVÍTOTT sendChannelsWithPrefixes =====
+
+
+
+// ===== 3. getBotPrefixInChannel HELPER =====
+
+func (p *YnmAdminPlugin) getBotPrefixInChannel(channel, botNick string) string {
+    // 1️⃣ Először nézzük a NAMES cache-ből (handleNamesReply)
+    prefix := p.Bot.GetMyPrefix(channel)
+    if prefix != "" {
+        return prefix
+    }
+
+    // 2️⃣ Ha nincs cache, nézzük a Channel.Users-ből
+    modes := p.Bot.GetUserModes(channel, botNick)
+    if modes == "" {
+        return ""
+    }
+
+    // 3️⃣ Konvertáld mode -> prefix
+    if strings.Contains(modes, "q") { return "~" }  // owner
+    if strings.Contains(modes, "a") { return "&" }  // admin
+    if strings.Contains(modes, "o") { return "@" }  // op
+    if strings.Contains(modes, "h") { return "%" }  // halfop
+    if strings.Contains(modes, "v") { return "+" }  // voice
+
+    return ""
 }

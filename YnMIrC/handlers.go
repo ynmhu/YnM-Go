@@ -318,7 +318,8 @@ func (c *Client) handleRawMessage(line string, receivedTime time.Time) {
         
     // 005 (RPL_ISUPPORT) kezelése - tartalmazhat "MODES=" szöveget
     case strings.Contains(line, " 005 "):
-        c.handle005Support(line)
+        // Ez numeric response, nem user MODE változtatás
+        // Kezeld, ha szükséges, vagy hagyd figyelmen kívül
         return
     }
 
@@ -481,65 +482,6 @@ if msg := parseMessage(line); msg != nil {
         }
     }
 }
-}
-func (c *Client) handle005Support(line string) {
-    // Parse: :server 005 nick PARAM1=value PARAM2=value :are supported
-    parts := strings.Fields(line)
-    if len(parts) < 4 {
-        return
-    }
-    
-    for _, param := range parts[3:] {
-        // Stop at the trailing message
-        if strings.HasPrefix(param, ":") {
-            break
-        }
-        
-        // Look for PREFIX=(ov)@+
-        if strings.HasPrefix(param, "PREFIX=") {
-            c.parsePrefixSupport(param)
-        }
-    }
-}
-func (c *Client) parsePrefixSupport(prefixParam string) {
-    // Format: PREFIX=(qaohv)~&@%+
-    // Extract: (modes)prefixes
-    
-    prefixParam = strings.TrimPrefix(prefixParam, "PREFIX=")
-    
-    if !strings.HasPrefix(prefixParam, "(") {
-        return
-    }
-    
-    parts := strings.SplitN(prefixParam, ")", 2)
-    if len(parts) != 2 {
-        return
-    }
-    
-    modes := parts[0][1:]     // Remove leading "("
-    prefixes := parts[1]
-    
-    if len(modes) != len(prefixes) {
-        log.Printf("⚠️ PREFIX parse error: modes=%d prefixes=%d", len(modes), len(prefixes))
-        return
-    }
-    
-    c.prefixMu.Lock()
-    defer c.prefixMu.Unlock()
-    
-    // Clear old mappings
-    c.prefixToMode = make(map[rune]rune)
-    c.modeToPrefix = make(map[rune]rune)
-    
-    // Build new mappings
-    for i, mode := range modes {
-        prefix := rune(prefixes[i])
-        c.prefixToMode[prefix] = mode
-        c.modeToPrefix[mode] = prefix
-    }
-    
-    log.Printf("✅ PREFIX updated: %s → modes=%s prefixes=%s", 
-        prefixParam, modes, prefixes)
 }
 
 func isUserModeChange(line string) bool {
@@ -730,108 +672,56 @@ func (c *Client) handleJoin(line string) {
     }
 }
 func (c *Client) joinAllChannels() {
-	c.mu.RLock()
-	isAuthenticated := c.undernetLoggedIn
-	undernetEnabled := c.config.Undernet.Enabled
-	isLoggedIn := c.loggedIn
-	c.mu.RUnlock()
-	
-	if undernetEnabled && !isAuthenticated {
-		return
-	}
-	
-	if !undernetEnabled && !isLoggedIn {
-		return
-	}
-	
-	if undernetEnabled && !isLoggedIn {
-		time.Sleep(5 * time.Second)
-		c.mu.RLock()
-		isLoggedIn = c.loggedIn
-		c.mu.RUnlock()
-		if !isLoggedIn {
-			return
-		}
-	}
-	
-	time.Sleep(1 * time.Second)
-	
-	for i, channel := range c.config.Channels {
-		if channel == c.config.ConsoleChannel {
-			log.Printf("⏭️ Kihagyom a console channel-t: %s\n", channel)
-			continue
-		}
-		
-		log.Printf("📍 Joining channel %d/%d: %s\n", i+1, len(c.config.Channels), channel)
-		c.Join(channel)
-		time.Sleep(500 * time.Millisecond)
-	}
-	
-	// ✅ WHO küldés EGYSZER, az ÖSSZES csatornára
-	c.startupWhoMutex.Lock()
-	if !c.startupWhoSent {
-		c.startupWhoSent = true
-		c.startupWhoMutex.Unlock()
-		
-		log.Println("🔍 Sending WHO for all channels (startup)...")
-		
-		go func() {
-			time.Sleep(2 * time.Second) // Várj, hogy JOIN-ok beérjenek
-			
-			for i, channel := range c.config.Channels {
-				if channel == c.config.ConsoleChannel {
-					continue
-				}
-				
-				time.Sleep(time.Duration(i) * 200 * time.Millisecond)
-				c.SendRaw(fmt.Sprintf("WHO %s", channel))
-			}
-		}()
-	} else {
-		c.startupWhoMutex.Unlock()
-	}
-}
-
-func (c *Client) IsWhoCacheFresh(channel string, maxAge time.Duration) bool {
-	key := strings.ToLower(channel)
-	
-	c.whoCacheMutex.RLock()
-	defer c.whoCacheMutex.RUnlock()
-	
-	lastWho, exists := c.whoResponseCache[key]
-	if !exists {
-		return false
-	}
-	
-	return time.Since(lastWho) < maxAge
-}
-
-func (c *Client) WaitForWhoResponse(channel string, timeout time.Duration) bool {
-	deadline := time.Now().Add(timeout)
-	key := strings.ToLower(channel)
-	
-	// Clear old cache entry
-	c.whoCacheMutex.Lock()
-	delete(c.whoResponseCache, key)
-	c.whoCacheMutex.Unlock()
-	
-	// Send WHO
-	c.SendRaw(fmt.Sprintf("WHO %s", channel))
-	
-	// Poll for response
-	for time.Now().Before(deadline) {
-		c.whoCacheMutex.RLock()
-		_, exists := c.whoResponseCache[key]
-		c.whoCacheMutex.RUnlock()
-		
-		if exists {
-			return true  // WHO complete
-		}
-		
-		time.Sleep(50 * time.Millisecond)
-	}
-	
-	return false  // Timeout
+  //  log.Println("🔍 DEBUG: joinAllChannels() meghívva")
+    
+    // ⚠️ KRITIKUS VÉDELEM: Ellenőrizzük az azonosítást
+    c.mu.RLock()
+    isAuthenticated := c.undernetLoggedIn
+    undernetEnabled := c.config.Undernet.Enabled
+    isLoggedIn := c.loggedIn
+    c.mu.RUnlock()
+    
+    if undernetEnabled && !isAuthenticated {
+       // log.Println("🔒 VÉDELEM: Undernet enabled, de még NINCS azonosítva - kihagyom a csatornákba lépést!")
+        return
+    }
+    
+    if !undernetEnabled && !isLoggedIn {
+      //  log.Println("🔒 VÉDELEM: Még NINCS bejelentkezve - kihagyom a csatornákba lépést!")
+        return
+    }
+    
+    // ⚠️ ÚJ: Undernet esetén várjuk meg a handleWelcome-t is
+    if undernetEnabled && !isLoggedIn {
+        log.Println("🔒 VÉDELEM: Undernet OK, de handleWelcome még nem futott le - várok 5 másodpercet...")
+        time.Sleep(5 * time.Second)
+        c.mu.RLock()
+        isLoggedIn = c.loggedIn
+        c.mu.RUnlock()
+        if !isLoggedIn {
+            log.Println("🔒 VÉDELEM: handleWelcome még mindig nem futott - kihagyom!")
+            return
+        }
+    }
+    
+    //log.Printf("✅ Azonosítás OK, belépés %d csatornába...\n", len(c.config.Channels))
+    
+    time.Sleep(1 * time.Second)
+    
+    for i, channel := range c.config.Channels {
+        // Console channel kihagyása (ha már benne vagyunk)
+        if channel == c.config.ConsoleChannel {
+            log.Printf("⏭️ Kihagyom a console channel-t: %s\n", channel)
+            continue
+        }
+        
+        log.Printf("📍 Joining channel %d/%d: %s\n", i+1, len(c.config.Channels), channel)
+        c.Join(channel)
+        time.Sleep(500 * time.Millisecond)
+    }
+    
+    //log.Println("✅ Összes csatornába belépve")
+    //c.SendMessage(c.config.ConsoleChannel, "✅ Sikeresen beléptem az összes csatornába.")
 }
 // Handle Chan MODE
 func (c *Client) handleChannelModeIs(line string) {
@@ -1094,6 +984,7 @@ func (c *Client) handlePong(line string) {
 }
 
 func (c *Client) handleNamesReply(line string) {
+    // Parse: :server 353 nick = #channel :nick1 @nick2 +nick3
     parts := strings.SplitN(line, " ", 6)
     if len(parts) < 6 {
         return
@@ -1102,57 +993,48 @@ func (c *Client) handleNamesReply(line string) {
     channel := parts[4]
     names := strings.TrimPrefix(parts[5], ":")
 
-    botNick := c.GetNick() 
     c.mu.Lock()
-    ch := c.getOrCreateChannel(channel)
+    defer c.mu.Unlock()
 
+    ch := c.getOrCreateChannel(channel)
+    
+    // Parse user list with modes
     for _, name := range strings.Fields(names) {
         nick := name
         modes := ""
-
+        
+        // Extract modes from nick prefixes
         for len(nick) > 0 {
-            p := rune(nick[0])
-
-            c.prefixMu.RLock()
-            mode, ok := c.prefixToMode[p]
-            c.prefixMu.RUnlock()
-
-            if !ok {
-                break
+            switch nick[0] {
+            case '@':
+                modes += "o"
+                nick = nick[1:]
+            case '+':
+                modes += "v"
+                nick = nick[1:]
+            case '%':
+                modes += "h"
+                nick = nick[1:]
+            case '&':
+                modes += "a"
+                nick = nick[1:]
+            case '~':
+                modes += "q"
+                nick = nick[1:]
+            default:
+                goto done
             }
-
-            modes += string(mode)
-            nick = nick[1:]
         }
-
-        if nick == "" {
-            continue
-        }
-
-        if u, exists := ch.GetUser(nick); exists {
-            u.Modes = modes
-        } else {
+        done:
+        
+        if nick != "" {
             ch.AddUser(nick, "", modes)
         }
-
-        // ✅ bot prefix
-        if strings.EqualFold(nick, botNick) {
-            prefix := ""
-            if strings.Contains(modes, "o") { prefix = "@" } else
-            if strings.Contains(modes, "h") { prefix = "%" } else
-            if strings.Contains(modes, "v") { prefix = "+" }
-
-            key := strings.ToLower(strings.TrimSpace(channel))
-            c.whoBotPrefixMu.Lock()
-            c.whoBotPrefix[key] = prefix
-            c.whoBotPrefixMu.Unlock()
-        }
     }
-
-    c.mu.Unlock()
-
+    
     if c.OnNames != nil {
-        c.OnNames(channel, strings.Fields(names))
+        namesList := strings.Fields(names)
+        c.OnNames(channel, namesList)
     }
 }
 
@@ -1368,24 +1250,16 @@ func (c *Client) handleWhoisOperator(line string) {
 	}
 }
 func (c *Client) handleEndOfWho(line string) {
-	parts := strings.Fields(line)
-	if len(parts) < 5 {
-		return
-	}
-	channel := parts[3]
-	
-	log.Printf("🎯 WHO complete for %s", channel)
-	
-	// ✅ Mark WHO as complete in cache
-	c.whoCacheMutex.Lock()
-	c.whoResponseCache[strings.ToLower(channel)] = time.Now()
-	c.whoCacheMutex.Unlock()
-	
-	log.Printf("[WHO] END (315) channel=%s", channel)
-	
-	if c.OnEndOfWho != nil {
-		c.OnEndOfWho(channel)
-	}
+    // :server 315 mynick #channel :End of WHO list
+    parts := strings.Fields(line)
+    if len(parts) < 5 {
+        return
+    }
+    channel := parts[3]
+	//log.Printf("[WHO] END (315) channel=%s", channel)
+    if c.OnEndOfWho != nil {
+        c.OnEndOfWho(channel)
+    }
 }
 
 func (c *Client) handleEndOfWhois(line string) {
@@ -1598,6 +1472,7 @@ func (c *Client) handleNickServNotice(line string) bool {
 
 // ─────────────────────── Helper Functions ─────────────────────────
 
+// parseMessage függvény bővítése:
 func parseMessage(line string) *Message {
     if !strings.HasPrefix(line, ":") || len(line) < 3 {
         return nil
@@ -1616,25 +1491,24 @@ func parseMessage(line string) *Message {
     
     // Külön kezelés különböző parancsokhoz
     switch command {
-	case "PRIVMSG":
-		if len(parts) < 4 {
-			return nil
-		}
-		target := parts[2]
-		raw := strings.Join(parts[3:], " ")
-		text := strings.TrimPrefix(raw, ":")
-
-		return &Message{
-			Sender:   sender,
-			Nick:     nick,
-			Hostmask: hostmask,
-			Channel:  target,
-			Text:     text,
-			Command:  command,
-			Params:   []string{target, text},
-			Time:     time.Now(),
-		}
-			
+    case "PRIVMSG":
+        if len(parts) < 4 {
+            return nil
+        }
+        target := parts[2]
+        text := strings.Join(parts[3:], " ")[1:] // Remove leading ":"
+        
+        return &Message{
+            Sender:   sender,
+            Nick:     nick,
+            Hostmask: hostmask,
+            Channel:  target,
+            Text:     text,
+            Command:  command,
+            Params:   []string{target, text},
+            Time:     time.Now(),
+        }
+        
     case "MODE":
         if len(parts) < 4 {
             return nil

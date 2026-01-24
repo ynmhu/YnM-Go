@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 	"context"
-	"sync"
+
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -30,17 +30,6 @@ import (
 type AdminDB struct {
 	db  *sql.DB
 	SQL *sql.DB
-	roleCache *RoleCache
-}
-type RoleCache struct {
-    mu     sync.RWMutex
-    cache  map[string]CachedRole  // "nick:channel" -> role
-    expiry time.Duration
-}
-
-type CachedRole struct {
-    role      string
-    timestamp time.Time
 }
 
 // ==================================================
@@ -361,85 +350,33 @@ func getExpectedSchema() map[string][]struct {
 // ==================================================
 
 func NewAdminDB() (*AdminDB, error) {
-    if err := os.MkdirAll("data", 0755); err != nil {
-        return nil, fmt.Errorf("couldn't create data dir: %v", err)
-    }
-    dbPath := filepath.Join("data", "ynm.db")
-    db, err := sql.Open("sqlite3", dbPath+"?_foreign_keys=1&_journal_mode=WAL")
-    if err != nil {
-        return nil, fmt.Errorf("couldn't open database: %v", err)
-    }
-    if err := db.Ping(); err != nil {
-        db.Close()
-        return nil, fmt.Errorf("couldn't ping database: %v", err)
-    }
-    if err := createTables(db); err != nil {
-        db.Close()
-        return nil, fmt.Errorf("couldn't create tables: %v", err)
-    }
-    checker := NewSchemaChecker(db)
-    if err := checker.CheckAndAddColumns(); err != nil {
-        fmt.Printf("Schema check error: %v\n", err)
-    }
-    
-    // ✅ CACHE INICIALIZÁLÁS
-    return &AdminDB{
-        db:  db, 
-        SQL: db,
-        roleCache: &RoleCache{
-            cache:  make(map[string]CachedRole),
-            expiry: 30 * time.Second, // 30 sec cache
-        },
-    }, nil
-}
+	if err := os.MkdirAll("data", 0755); err != nil {
+		return nil, fmt.Errorf("couldn't create data dir: %v", err)
+	}
 
-func (a *AdminDB) getCachedRole(nick, channel string) (string, bool) {
-    key := fmt.Sprintf("%s:%s", strings.ToLower(nick), strings.ToLower(channel))
-    
-    a.roleCache.mu.RLock()
-    defer a.roleCache.mu.RUnlock()
-    
-    cached, exists := a.roleCache.cache[key]
-    if !exists {
-        return "", false
-    }
-    
-    // Ellenőrizd, hogy lejárt-e
-    if time.Since(cached.timestamp) > a.roleCache.expiry {
-        return "", false
-    }
-    
-    return cached.role, true
-}
+	dbPath := filepath.Join("data", "ynm.db")
+	db, err := sql.Open("sqlite3", dbPath+"?_foreign_keys=1&_journal_mode=WAL")
+	if err != nil {
+		return nil, fmt.Errorf("couldn't open database: %v", err)
+	}
 
-func (a *AdminDB) setCachedRole(nick, channel, role string) {
-    key := fmt.Sprintf("%s:%s", strings.ToLower(nick), strings.ToLower(channel))
-    
-    a.roleCache.mu.Lock()
-    defer a.roleCache.mu.Unlock()
-    
-    a.roleCache.cache[key] = CachedRole{
-        role:      role,
-        timestamp: time.Now(),
-    }
-}
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("couldn't ping database: %v", err)
+	}
 
-func (a *AdminDB) InvalidateRoleCache(nick, channel string) {
-    key := fmt.Sprintf("%s:%s", strings.ToLower(nick), strings.ToLower(channel))
-    
-    a.roleCache.mu.Lock()
-    defer a.roleCache.mu.Unlock()
-    
-    delete(a.roleCache.cache, key)
-}
+	if err := createTables(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("couldn't create tables: %v", err)
+	}
 
-func (a *AdminDB) ClearRoleCache() {
-    a.roleCache.mu.Lock()
-    defer a.roleCache.mu.Unlock()
-    
-    a.roleCache.cache = make(map[string]CachedRole)
-}
+	checker := NewSchemaChecker(db)
+	if err := checker.CheckAndAddColumns(); err != nil {
+		fmt.Printf("Schema check error: %v\n", err)
+	}
 
+	return &AdminDB{db: db, SQL: db}, nil
+}
 
 func (a *AdminDB) Close() error {
 	return a.db.Close()

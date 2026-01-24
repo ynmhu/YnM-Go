@@ -38,30 +38,22 @@ func NewClient(cfg *YnMConfig.Config) *Client {
 		sendQueue:      make(chan string, 100),
 		sendDone:       make(chan struct{}),
 		whoisData:      make(map[string]*WhoisData),
-		whoisChannels:  make(map[string][]chan *WhoisData),
+		whoisChannels:	make(map[string][]chan *WhoisData), 
 		whoBotPrefix:   make(map[string]string),
-
-		// default PREFIX mapping (ha még nem jött meg az 005 PREFIX=...)
-		prefixToMode: map[rune]rune{'@': 'o', '+': 'v', '%': 'h', '&': 'a', '~': 'q'},
-		modeToPrefix: map[rune]rune{'o': '@', 'v': '+', 'h': '%', 'a': '&', 'q': '~'},
-
-		messageDelay: 1 * time.Second,
-		
-		// ✅ WHO CACHE INIT
-		whoResponseCache: make(map[string]time.Time),
-		startupWhoSent:   false,
+		//messageDelay:   time.Duration(client.messageDelay) * time.Millisecond,
+		messageDelay:  1 * time.Second,
 	}
-
+	
+	
 	// Start send queue handler
 	go c.sendQueueHandler()
-
+	
 	// Start reconnect loop if enabled
 	if cfg.ReconnectOnDisconnect > 0 {
 		go c.reconnectLoop()
 	}
 	return c
 }
-
 
 // ─────────────────────── Configuration and State ─────────────────────────
 
@@ -370,12 +362,7 @@ func (c *Client) sendRawDirect(msg string) error {
 }
 
 func (c *Client) SendRaw(msg string) error {
-    select {
-    case c.sendQueue <- msg:
-        return nil
-    default:
-        return fmt.Errorf("send queue full")
-    }
+    return c.sendRawDirect(msg)
 }
 
 func (c *Client) SendMessage(target, text string) {

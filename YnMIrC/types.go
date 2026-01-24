@@ -235,8 +235,7 @@ type Client struct {
 	disconnectChan  chan struct{}
 	reconnecting    bool
 	loggedIn        bool
-	
-	// Undernet 
+	//Undernet 
 	undernetLoginSent bool
     undernetLoggedIn  bool
 	
@@ -258,8 +257,7 @@ type Client struct {
 	whoisData     map[string]*WhoisData
 	whoisMutex    sync.Mutex
 	whoisChannels map[string][]chan *WhoisData  
-	
-	// Bot prefix cache
+	//bot
 	whoBotPrefixMu sync.RWMutex
 	whoBotPrefix   map[string]string
 
@@ -272,19 +270,8 @@ type Client struct {
 	plugins []interface{}
     pluginMu sync.RWMutex
 	db *sql.DB
-	
-	// ISUPPORT PREFIX parsing (005 PREFIX=...)
-    prefixToMode map[rune]rune
-    modeToPrefix map[rune]rune
-    prefixMu     sync.RWMutex
-    
-    // ✅ WHO RESPONSE CACHE
-    whoResponseCache map[string]time.Time  // channel -> last WHO time
-    whoCacheMutex    sync.RWMutex
-    
-    // ✅ STARTUP WHO TRACKING
-    startupWhoSent   bool
-    startupWhoMutex  sync.Mutex
+
+
 }
 
 // IRCClient interface for better testability and abstraction
