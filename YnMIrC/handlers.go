@@ -224,16 +224,20 @@ func (c *Client) handleRawMessage(line string, receivedTime time.Time) {
 
 	}
     
+
 	// ⚠️ NOTICE kezelése
 	if strings.Contains(line, " NOTICE ") {
 
 		if strings.HasPrefix(line, ":X!") &&
-			strings.Contains(line, " NOTICE ") &&
 			strings.Contains(line, "AUTHENTICATION SUCCESSFUL") {
 
 			c.mu.Lock()
 			c.undernetLoggedIn = true
 			c.mu.Unlock()
+
+			if c.OnLoginSuccess != nil {
+				c.OnLoginSuccess()
+			}
 
 			log.Printf("✅ Undernet X login detected (NOTICE) -> joining all channels")
 			go c.joinAllChannels()
@@ -252,17 +256,14 @@ func (c *Client) handleRawMessage(line string, receivedTime time.Time) {
         c.handleNickInUse()
         return
 		
-		case strings.Contains(line, " 396 "):
-			low := strings.ToLower(line)
-			my := strings.ToLower(c.nick)
-			if strings.Contains(low, " 396 "+my+" ") {
-				c.mu.Lock()
-				c.undernetLoggedIn = true
-				c.mu.Unlock()
-				log.Printf("✅ Hidden host ready (396) -> joining all channels")
-				go c.joinAllChannels()
-			}
-			return
+	case strings.Contains(line, " 396 "):
+		low := strings.ToLower(line)
+		my := strings.ToLower(c.nick)
+		if strings.Contains(low, " 396 "+my+" ") {
+			log.Printf("✅ Hidden host ready (396)")
+			go c.joinAllChannels()
+		}
+		return
 
     case strings.Contains(line, " 001 "):
         c.handleWelcome()
@@ -538,30 +539,28 @@ func (c *Client) handleWelcome() {
         c.startedAt = time.Now()
     }
     c.mu.Unlock()
-    
-    //log.Println("✔️ Bejelentkezés sikeres!")
-    
+
     go func() {
         time.Sleep(3 * time.Second)
-        
+
         if c.config.Undernet.Enabled {
             c.mu.Lock()
             if !c.undernetLoginSent {
                 c.undernetLoginSent = true
                 c.mu.Unlock()
-                
-                //log.Println("🔑 Undernet X azonosítás folyamatban...")
                 c.UndernetLogin()
             } else {
                 c.mu.Unlock()
             }
-        } else if c.config.NickServLogin {  // ← JAVÍTÁS
-           // log.Println("🔑 NickServ azonosítás folyamatban...")
+        } else if c.config.NickServLogin {
             c.IdentifyNickServ()
-        } else {
-          //  log.Println("🔍 DEBUG: No authentication required")
         }
     }()
+
+    // ✅ Indítsuk el a join folyamatot 001 után:
+    // - Undernet ON: vár X-auth-ra, 15s után console-only
+    // - Undernet OFF: belép az összes csatornába
+    go c.joinAllChannels()
 }
 
 
@@ -589,26 +588,30 @@ func (c *Client) handleUndernetResponse(msg Message) {
         return
     }
     
-    // Handle already logged in
-    if strings.Contains(response, "already authenticated") {
-        //fmt.Println("✅ Already authenticated with Undernet X")
-        c.mu.Lock()
-        c.undernetLoggedIn = true
-        c.mu.Unlock()
-        return
-    }
-    
-    // Handle authentication failures
-    if strings.Contains(response, "authentication failed") ||
-       strings.Contains(response, "invalid username") ||
-       strings.Contains(response, "invalid password") ||
-       strings.Contains(response, "login failed") {
-      //  fmt.Printf("❌ Undernet X authentication failed: %s\n", msg.Text)
-		if c.OnLoginFailed != nil {
-			c.OnLoginFailed("Undernet X authentication failed")  // ← Specifikus üzenet
+			// Handle already logged in
+		if strings.Contains(response, "authentication successful") {
+			c.mu.Lock()
+			c.undernetLoggedIn = true
+			c.mu.Unlock()
+
+			if c.OnLoginSuccess != nil {
+				c.OnLoginSuccess()
+			}
+			go c.joinAllChannels()
+			return
 		}
-		return
-    }
+
+		if strings.Contains(response, "already authenticated") {
+			c.mu.Lock()
+			c.undernetLoggedIn = true
+			c.mu.Unlock()
+
+			if c.OnLoginSuccess != nil {
+				c.OnLoginSuccess()
+			}
+			go c.joinAllChannels()
+			return
+		}
 }
 
 func (c *Client) handleJoin(line string) {
@@ -683,34 +686,55 @@ func (c *Client) handleJoin(line string) {
     }
 }
 func (c *Client) joinAllChannels() {
-    // Várjuk meg a szükséges állapotokat, ne return-öljünk rögtön.
-    deadline := time.Now().Add(20 * time.Second)
+    deadline := time.Now().Add(15 * time.Second)
 
     for {
         c.mu.RLock()
         undernetEnabled := c.config.Undernet.Enabled
         isAuthenticated := c.undernetLoggedIn
         isLoggedIn := c.loggedIn
+        console := strings.TrimSpace(c.config.ConsoleChannel)
         c.mu.RUnlock()
 
-        ready := isLoggedIn && (!undernetEnabled || isAuthenticated)
-        if ready {
+        // ha még 001 sincs meg, várunk
+        if !isLoggedIn {
+            if time.Now().After(deadline) {
+                // 001 nélkül nem joinolunk semmit
+                log.Printf("🔒 joinAllChannels: timeout waiting for 001 (loggedIn=false)")
+                return
+            }
+            time.Sleep(500 * time.Millisecond)
+            continue
+        }
+
+        // UnderNet OFF: mehet minden csatorna
+        if !undernetEnabled {
             break
         }
 
+        // UnderNet ON és már auth: mehet minden csatorna
+        if isAuthenticated {
+            break
+        }
+
+        // UnderNet ON, nincs auth, de lejárt a 15mp: csak console
         if time.Now().After(deadline) {
-            log.Printf("🔒 joinAllChannels: timeout (loggedIn=%v undernetEnabled=%v undernetLoggedIn=%v)",
-                isLoggedIn, undernetEnabled, isAuthenticated)
+            if console != "" {
+                log.Printf("⏳ No X-auth in 15s -> joining ConsoleChannel only: %s", console)
+                c.Join(console)
+            }
             return
         }
 
         time.Sleep(500 * time.Millisecond)
     }
 
+    // ide csak akkor jutunk, ha:
+    // - UnderNet OFF, vagy
+    // - UnderNet ON és auth megvan
     time.Sleep(1 * time.Second)
 
-    // Join minden csatornába, beleértve a ConsoleChannel-t is,
-    // a lista duplikációját kiszűrjük.
+    // JOIN MINDEN csatorna (és console is)
     joined := make(map[string]bool)
 
     for i, channel := range c.config.Channels {
@@ -729,7 +753,7 @@ func (c *Client) joinAllChannels() {
         time.Sleep(500 * time.Millisecond)
     }
 
-    // Ha a ConsoleChannel nincs benne a Channels listában, akkor is menjünk be oda.
+    // Ha a ConsoleChannel nincs benne a listában, akkor is menjünk be oda.
     if c.config.ConsoleChannel != "" {
         cc := strings.TrimSpace(c.config.ConsoleChannel)
         key := strings.ToLower(cc)

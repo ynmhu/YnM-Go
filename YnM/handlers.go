@@ -80,30 +80,7 @@ func (h *EventHandler) Setup() {
 
 
 func (h *EventHandler) handleConnect() {
-	go func() {
-		time.Sleep(5 * time.Second)
-		//log.Println("📡 Csatlakozva az IRC szerverhez, belépés a console channelbe...")
-		
-		log.Printf("🔍 Console channel: '%s'\n", h.config.ConsoleChannel)
-		
-		h.bot.SendRaw(fmt.Sprintf("JOIN %s", h.config.ConsoleChannel))
-		
-		//log.Println("✅ JOIN parancs elküldve a console channelhez")
-		
-		time.Sleep(3 * time.Second)
-		//log.Println("🔄 Második próbálkozás...")
-		h.bot.SendRaw(fmt.Sprintf("JOIN %s", h.config.ConsoleChannel))
-		
-		// ⚠️ JAVÍTÁS: NickServLogin használata
-		if !h.config.NickServLogin && !h.config.UseSASL && !h.config.Undernet.Enabled {
-			time.Sleep(10 * time.Second)
-			//log.Println("📤 Küldöm: Autentikáció ki van kapcsolva")
-			h.bot.SendMessage(h.config.ConsoleChannel, "⚠️ Autentikáció ki van kapcsolva - csak console channelben vagyok elérhető")
-			h.bot.SendMessage(h.config.ConsoleChannel, "ℹ️ Az autentikáció engedélyezéséhez állítsd be a NickServLogin, UseSASL vagy Undernet opciót")
-		} else {
-			//log.Println("🔍 Auth beállítva, várakozás a NickServ/SASL/Undernet válaszra...")
-		}
-	}()
+    log.Printf("🔍 Connected. Console channel is '%s'", h.config.ConsoleChannel)
 }
 
 
