@@ -214,37 +214,29 @@ func (c *Client) handleRawMessage(line string, receivedTime time.Time) {
 		}
 	}
 
-    // ========== UNDERNET AZONOSÍTÁS DETEKTÁLÁS ==========
-    // Detektáld a sikeres Undernet azonosítást
-    if strings.Contains(line, "You are now logged in as") ||
-       strings.Contains(line, "Welcome to the UnderNET") ||
-       strings.Contains(line, "registered and protected") ||
-       // ⚡ JAVÍTÁS: Csak akkor, ha NEM PRIVMSG!
-       (strings.Contains(line, c.nick) && strings.Contains(line, "users.undernet.org") && !strings.Contains(line, "PRIVMSG")) {
-        c.mu.Lock()
-        if !c.undernetLoggedIn {
-            c.undernetLoggedIn = true
-            c.mu.Unlock()
-            
-            //log.Println("✅ Undernet azonosítás sikeresen detektálva")
-            
-            // ⚠️ JAVÍTÁS: Várunk egy kicsit, hogy a hostmask frissüljön
-            go func() {
-                time.Sleep(2 * time.Second)
-                //log.Println("🚀 Csatlakozom a csatornákhoz...")
-                c.joinAllChannels()
-            }()
-            
-            // Jelzés, hogy az azonosítás sikeres
-            if c.OnLoginSuccess != nil {
-                c.OnLoginSuccess()
-            }
-        } else {
-            c.mu.Unlock()
-            //log.Println("🔍 DEBUG: Undernet már azonosítva, kihagyom")
-        }
-        return
-    }
+	if strings.Contains(line, "You are now logged in as") ||
+	   strings.Contains(line, "Welcome to the UnderNET") ||
+	   strings.Contains(line, "registered and protected") ||
+	   (strings.Contains(line, " NOTICE ") && strings.Contains(line, c.nick) && strings.Contains(line, "users.undernet.org")) {
+
+		c.mu.Lock()
+		if !c.undernetLoggedIn {
+			c.undernetLoggedIn = true
+			c.mu.Unlock()
+
+			go func() {
+				time.Sleep(2 * time.Second)
+				c.joinAllChannels()
+			}()
+
+			if c.OnLoginSuccess != nil {
+				c.OnLoginSuccess()
+			}
+		} else {
+			c.mu.Unlock()
+		}
+		return
+	}
     
     // ⚠️ ÚJ: NOTICE kezelése (NickServ gyakran NOTICE-szal válaszol)
     if strings.Contains(line, " NOTICE ") {
