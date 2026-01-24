@@ -167,9 +167,9 @@ func (c *Client) readLoop() {
         if line == "" {
             continue
         }
-		log.Printf("[RAW-IN-BEFORE] %s", line)
+		//log.Printf("[RAW-IN-BEFORE] %s", line)
 		line = stripIRCTags(line)
-		log.Printf("[RAW-IN-AFTER ] %s", line)
+		//log.Printf("[RAW-IN-AFTER ] %s", line)
 
         receivedTime := time.Now()
 
@@ -261,7 +261,7 @@ func (c *Client) handleRawMessage(line string, receivedTime time.Time) {
 
 			// 2) és csak ezután jelezzük a login sikert (kicsi késleltetéssel)
 			go func() {
-				time.Sleep(2 * time.Second)
+				time.Sleep(5 * time.Second)
 				if c.OnLoginSuccess != nil {
 					c.OnLoginSuccess()
 				}
