@@ -152,31 +152,42 @@ func checkGlobalFlood(c *Client, nick string) bool {
 // ─────────────────────── Main Read Loop ─────────────────────────
 
 func (c *Client) readLoop() {
-    defer func() {
-        c.Disconnect()
-    }()
-    
+    defer func() { c.Disconnect() }()
+
     reader := bufio.NewReader(c.conn)
-    
+
     for {
         line, err := reader.ReadString('\n')
-        
         if err != nil {
             fmt.Printf("Olvasási hiba: %v\n", err)
             return
         }
+
         line = strings.TrimSpace(line)
         if line == "" {
             continue
         }
 
+        line = stripIRCTags(line) // <-- IDE (fontos!)
+
         receivedTime := time.Now()
+
         if strings.HasPrefix(line, "PING ") {
             c.SendRaw(strings.Replace(line, "PING", "PONG", 1))
             continue
         }
+
         c.handleRawMessage(line, receivedTime)
     }
+}
+
+func stripIRCTags(line string) string {
+    if strings.HasPrefix(line, "@") {
+        if i := strings.IndexByte(line, ' '); i != -1 {
+            return line[i+1:]
+        }
+    }
+    return line
 }
 // ─────────────────────── Message Handling ─────────────────────────
 
