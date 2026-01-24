@@ -149,6 +149,8 @@ func (p *YnmAdminPlugin) handleAddAdminCommand(fullHostmask string, userArgs []s
                     targetHostmask = fmt.Sprintf("%s!%s@%s", whois.Nick, whois.Username, whois.Hostname)
                 }
                 targetHostmask = YnMModule.SimplifyHostmask(targetHostmask)
+				p.Bot.SendMessage(issuingChannel, "DEBUG whois.Hostmask: "+whois.Hostmask)
+p.Bot.SendMessage(issuingChannel, "DEBUG simplified hostmask: "+targetHostmask)
 
                 // ✅ 2. HOSTMASK ALAPÚ VÉDELEM
                 if p.isOwnerOrBotByHostmask(targetHostmask) {

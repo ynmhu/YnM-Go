@@ -281,6 +281,10 @@ func (c *Client) handleRawMessage(line string, receivedTime time.Time) {
         c.handleWhoisUser(line)
         return
         
+	case strings.Contains(line, " 401 "):
+    log.Printf("[WHOIS-RAW-401] %s", line)
+    return	
+	
     case strings.Contains(line, " 312 "):  
         c.handleWhoisServer(line)
         return
