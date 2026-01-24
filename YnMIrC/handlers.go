@@ -219,22 +219,8 @@ func (c *Client) handleRawMessage(line string, receivedTime time.Time) {
 	   strings.Contains(line, "registered and protected") ||
 	   (strings.Contains(line, " NOTICE ") && strings.Contains(line, c.nick) && strings.Contains(line, "users.undernet.org")) {
 
-		c.mu.Lock()
-		if !c.undernetLoggedIn {
-			c.undernetLoggedIn = true
-			c.mu.Unlock()
-
-			go func() {
-				time.Sleep(2 * time.Second)
-				c.joinAllChannels()
-			}()
-
-			if c.OnLoginSuccess != nil {
-				c.OnLoginSuccess()
-			}
-		} else {
-			c.mu.Unlock()
-		}
+		// max logolj, de NE állíts undernetLoggedIn-t és NE joinolj itt
+		log.Printf("[DEBUG] undernet login hint: %s", line)
 		return
 	}
     
@@ -621,9 +607,6 @@ func (c *Client) handleJoin(line string) {
     }
 
     // ========== UNDERNET AZONOSÍTÁS DETEKTÁLÁS ==========
-    // ⚠️ ELTÁVOLÍTVA: Ne itt kezeljük az azonosítást
-    // A handleRawMessage() már kezeli a "You are now logged in" üzenetet
-    // Itt csak regisztráljuk a JOIN eseményt
 
     c.mu.Lock()
     // Create or get channel
@@ -710,18 +693,15 @@ func (c *Client) joinAllChannels() {
     
     time.Sleep(1 * time.Second)
     
-    for i, channel := range c.config.Channels {
-        // Console channel kihagyása (ha már benne vagyunk)
-        if channel == c.config.ConsoleChannel {
-            log.Printf("⏭️ Kihagyom a console channel-t: %s\n", channel)
-            continue
-        }
-        
-        log.Printf("📍 Joining channel %d/%d: %s\n", i+1, len(c.config.Channels), channel)
-        c.Join(channel)
-        time.Sleep(500 * time.Millisecond)
-    }
-    
+		for i, channel := range c.config.Channels {
+			if c.config.ConsoleChannel != "" && strings.EqualFold(channel, c.config.ConsoleChannel) {
+				continue
+			}
+			log.Printf("📍 Joining channel %d/%d: %s\n", i+1, len(c.config.Channels), channel)
+			c.Join(channel)
+			time.Sleep(500 * time.Millisecond)
+		}
+			
     //log.Println("✅ Összes csatornába belépve")
     //c.SendMessage(c.config.ConsoleChannel, "✅ Sikeresen beléptem az összes csatornába.")
 }
