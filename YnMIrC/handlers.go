@@ -167,8 +167,9 @@ func (c *Client) readLoop() {
         if line == "" {
             continue
         }
-
-        line = stripIRCTags(line) // <-- IDE (fontos!)
+		log.Printf("[RAW-IN-BEFORE] %s", line)
+		line = stripIRCTags(line)
+		log.Printf("[RAW-IN-AFTER ] %s", line)
 
         receivedTime := time.Now()
 
