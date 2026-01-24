@@ -1,0 +1,13 @@
+services:
+  ynm-bot:
+    image: git.ynm.hu/markus/ynm-go:latest
+    container_name: YnM-Go
+    restart: unless-stopped
+    ports:
+      - "8080:2525"  # 👈 Hoszt:8080 → Konténer:2525 (Web Api)
+    volumes:
+      - ./YnMConfig:/app/YnMConfig  
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - TZ=Europe/Budapest

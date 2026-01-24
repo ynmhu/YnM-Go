@@ -1,0 +1,58 @@
+# KIZÁRÁSOK - EZEK NEM KERÜLNEK A DOCKER IMAGE-BE
+
+# 1. Konfigurációs mappa (csak a példafájlok kivételével)
+YnMConfig/**
+!YnMConfig/**/*.go
+!YnMConfig/*example*.yml
+!YnMConfig/*example*.yaml
+
+# 2. Adat és log mappák - EZEK SEMMIKÉPP NE KERÜLJENEK BE!
+data/
+logs/
+
+# 3. Egyéb fájlok amiket nem akarunk bemásolni
+.git/
+.gitignore
+.gitmodules
+
+# 4. IDE és ideiglenes fájlok
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 5. Titkos fájlok és kulcsok
+.env
+.env.*
+*.pem
+*.key
+*.crt
+*.cert
+*.p12
+id_rsa
+id_dsa
+
+# 6. Adatbázis fájlok
+*.db
+*.sqlite
+*.sqlite3
+
+# 7. Build és binary fájlok (majd a Docker build csinálja)
+YnM-Go
+ynm-bot
+
+# 8. Egyéb
+docker-compose.yml
+Dockerfile
+Makefile
+README.md
+LICENSE
+nginx.conf
+version-manager.sh
+
+# 9. Log fájlok
+*.log
+log.txt
+debug.log
+

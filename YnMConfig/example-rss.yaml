@@ -1,0 +1,31 @@
+#RSS FEED 
+feeds:
+  - name: "HunTorrent"
+    channels:
+      - "#Torrent"
+    rss_url: "https://huntorr"
+    max_items: 5
+    start_hour: 7
+    end_hour: 20
+    check_interval: 10
+    enabled: true
+
+  - name: "NCore"
+    channels:
+      - "#Torrent"
+    rss_url: "https://ncore"
+    max_items: 5
+    start_hour: 7
+    end_hour: 20
+    check_interval: 5
+    enabled: true
+
+  - name: "MajomParade"
+    channels:
+      - "#Torrent"
+    rss_url: "https://majomparade"
+    max_items: 5
+    start_hour: 7
+    end_hour: 20
+    check_interval: 15
+    enabled: true

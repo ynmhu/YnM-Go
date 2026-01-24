@@ -1,0 +1,486 @@
+# ========================================================
+#  Szerzői jog © 2025 Markus (markus@ynm.hu)
+#  https://ynm.hu        – főoldal
+#  https://forum.ynm.hu  – hivatalos fórum
+#  https://bot.ynm.hu    – bot oldala és dokumentáció
+#
+#  Minden jog fenntartva. A kód Markus tulajdona, tilos terjeszteni vagy
+#  módosítani a szerző írásos engedélye nélkül.
+#
+#  Ez a fájl a YnM-Go IRC-bot rendszerének része.
+# ========================================================
+
+
+# ────────── Plugins (true/false) ──────────
+
+Plugins:
+  # BEGIN:PLUGINS_owner
+  # YnM owner
+  enable_control: true         # ⚠️ DANGER! To Enables !die, !restart, !reload commands
+  enable_update: false           # ⚠️ DANGER! To Enables !update, !upgrade commands
+  enable_debug: false            # ⚠️ DANGER! To Debug mode active
+  enable_webauth: false          # ⚠️ DANGER! To WebAuth mode active
+  enable_ctcp: false             # ⚠️ DANGER! To CTCP Reply mode active
+  enable_autotopic: false        # ⚠️ DANGER! To AutoTopic ConsoleChan mode active
+  enable_service_m: false        # ⚠️ DANGER! To Enable Service Manager mode active
+  enable_fail2ban: false         # ⚠️ DANGER! To Enable Fail2Ban
+  # END:PLUGINS_owner
+
+
+  # BEGIN:PLUGINS_IRC
+  # YnM IRC Plugins
+  enable_cycle: true            # Cycle plugin when no @
+  enable_ping: false             # Enables ping command to check bot responsiveness
+  enable_xp: false               # Tracks and awards experience points to users
+  enable_help: false
+  enable_mp3scanner: false
+  enable_botmanager: false
+  # END:PLUGINS_IRC
+
+
+  # BEGIN:PLUGINS_WEB
+  # YnM Web plugins
+  enable_webstatus: false        # Shows status of web services
+  enable_yt: false               # Provides YouTube video search and info
+  enable_forum: false            # Forum related features
+  enable_webhook: false          # Allows receiving webhooks
+  enable_ExTrigger: false        # Allows sending messages to webhooks
+  enable_git: false              # Git repository interactions
+  enable_link: false             # Link shortening or handling
+  # END:PLUGINS_WEB
+
+
+  # BEGIN:PLUGINS_MEDIA
+  # Media plugins
+  enable_movie: false            # Movie information and lookup
+  enable_movie_request: false    # Allows users to request movies
+  enable_movie_completion: false # Completes movie requests automatically
+  enable_movie_deletion: false   # Allows deletion of movie entries
+  enable_media_upload: false     # Upload media to server
+  enable_media_ajanlat: false    # Suggest media recommendations
+  enable_jellyfin_info: false    # Fetch info from Jellyfin server
+  enable_media_activity: false   # Tracks media-related activity
+  enable_latest_music: false     # Tracks www.legszebbnotak.hu
+  enable_telegram: false         # Telegram
+  # END:PLUGINS_MEDIA
+
+
+  # BEGIN:PLUGINS_SCHEDULED
+  # Scheduled plugins
+  enable_joke: false             # Sends scheduled jokes
+  enable_szekelyhon: false       # Provides news from Szekelyhon
+  enable_nameday: false          # Announces namedays
+  enable_huntorrent: false       # Checks for torrent availability
+  # END:PLUGINS_SCHEDULED
+
+
+  # BEGIN:PLUGINS_INTERACT
+  # YnM Interact
+  enable_chatgpt: false          # ChatGPT interaction plugin
+  enable_horoscope: false        # Provides daily horoscopes
+  enable_learn: false            # Learning and quiz features
+  enable_imdb: false             # Fetch movie info from IMDb
+  enable_vicc: false             # Tells jokes (vicc = joke)
+  enable_weather: false          # Provides weather information
+  enable_seen: false             # Tracks last seen activity of users
+  enable_sms: false              # SMS sending feature
+  enable_status: false           # System or user status reporting
+  enable_ora: false              # Time related plugin (ora = clock/time)
+  enable_alexa: false            # Amazon Alexa
+  # END:PLUGINS_INTERACT
+
+
+  # BEGIN:PLUGINS_SYSTEM
+  # YnM System
+  enable_monitor: false          # System monitoring
+  enable_bruteforce: false       # Security testing/hacking tools
+  enable_resource_monitor: false
+  # END:PLUGINS_SYSTEM
+
+
+  # BEGIN:PLUGINS_NETWORK
+  # YnM Network Plugins
+  enable_ssh: false              # SSH connection plugin
+  enable_nmap: false             # Network scanning using Nmap
+  enable_dns: false              # DNS lookup tools
+  enable_ip: false               # IP address utilities
+  enable_pinghost: false         # Ping specific hosts
+  enable_uptime: false           # Show Uptime !uptime
+  enable_discord: false          # Discord
+  enable_joinmessage: false
+  enable_joinmessage_discord: false
+  # END:PLUGINS_NETWORK
+
+
+  # BEGIN:PLUGINS_EXPERIMENTAL
+  # YnM False & Working (experimental/disabled)
+  enable_autovoice: false        # Automatic voice assign
+  enable_mail: false             # Mail sending/receiving
+  enable_xes0: false             # Experimental plugin
+  # END:PLUGINS_EXPERIMENTAL
+  
+# ⚠️ DANGER! ⚠️ DANGER!  ⚠️ 
+# ──── Debug Settings
+debug_channel: "#YnM-Debug"
+update_check:                    
+  enabled: false                  
+  auto_upgrade: false       # ⚠️ DANGER! To Enables 
+  check_interval: "60m"      # Check for updates every 2 hours
+  notify_interval: "180m"     # Notify about updates once per day
+# ──── SMTP Settings
+smtp:
+  host: mail.ynm.hu
+  port: 465
+  user: no-reply@ynm.hu
+  password: "******************"
+# ──── Bruteforce Settings
+bruteforce_attack_plugin:
+  log_path: "/var/log/auth.log"
+  channels:
+    - "#YnM"
+#    - "#YnM"
+#    - "142*************399"
+    
+    
+# ──── Resource Monitor
+resource_monitor:
+  channels:
+    - "#YnM"          # IRC csatorna
+    - "#Magyar"
+    - "142*************399" # Discord csatorna ID (csak számok)
+  threshold: 100          # CPU/RAM % riasztás küszöb
+  interval_seconds: 360  # Ellenőrzés időköze másodpercben (itt: 1 óra)
+  auto_start: false        # Ha true, a bot induláskor automatikusan elindítja a monitoringot    
+# ──── Console/Terminal
+console:
+  enabled: false           # true = bekapcsolva, false = kikapcsolva
+  port: 2626             # Telnet port (változtasd ha foglalt!)
+  bind_addr: "0.0.0.0" # Csak localhost (biztonságos) # vagy "0.0.0.0" ha távolról is elérhető legyen
+  password: "pass123"  # VÁLTOZTASD MEG! Ez a belépési jelszó
+
+# END ⚠️ DANGER!
+
+# 🎮 Discord beállítások (ÚJ)
+discord:
+  enabled: false
+  token: "MTQyNTAzMz*****************i5w-kdMs"
+  # Opcionális: melyik channel-ekre figyeljen
+  channels:
+    - "142*************399"  # Discord channel ID-k
+#    - "118456055842734083"
+
+#Join Messasge 
+joinmessage_channels: 
+ #   - "#Magyar"
+    - "#YnM"
+joinmessage_discord_channels: 
+    - "142*************399"  
+#    - "142*************399"
+joinmessage_text: "ﮩ٨ـﮩﮩ٨ـ🤖ﮩ٨ـﮩﮩ٨ـ"
+joinmessage_delay: 10s
+#
+
+
+
+
+
+# EDIT_SERVER_BEFORE_START (Example: Server: "eu.undernet.org" — delete this line after editing)
+# ────────── IRC kapcsolat ──────────
+Server: "192.168.0.150"             # IRC szerver
+Port: "6667"                    # Normál TCP port
+TLSPort: "6697"                 # TLS port
+NickName: "YnM-Go-Docker"            
+UserName: "YnM-Go-Docker"
+RealName: "https://ynm-go.ynm.hu"
+AutoJoinWithoutLogin: false   # Ne lépjen be szobákba login nélkül
+# ────────── Console beállítás ──────────
+# EDIT_CONSOLE_BEFORE_START (Example: Console: "#YnM" — delete this line after editing)
+
+Console: "#YnM"                 # Kötelező logcsatorna
+ConsoleKey: "Teszt"             # Csatorna jelszó, ha kell
+
+# ────────── NickServ ──────────
+NickServLogin: false                            # Automatikus login NickServ-hez
+NickservBotnick: "NickServ"
+NickservNick: "YnM-Beta"
+NickservPass: "******"   # ⚠️ Biztonságosan tárold!
+
+# ────────── Undernet (X service) ──────────
+Undernet:
+  Enabled: false
+  XUser: "YnM"
+  XPass: "******"
+  Modes: "+iwx"
+# ────────── SSL/TLS kapcsolat (opcionális) ──────────
+TLS: false                          # ha true, akkor TLS (SSL) kapcsolaton csatlakozik
+TLSCert: "/home/bot/ssl.cert"      # kliens tanúsítvány (opcionális, ha a szerver igényli)
+TLSKey: "/home/bot/ssl.key"        # kliens privát kulcs (opcionális)
+# ────────── SASL kapcsolat (opcionális) ──────────
+SASL: false                     # Kapcsold be a SASL-t
+SASLUser: "YnM-Beta"               # Ez a regisztrált nick
+SASLPass: "*******"             # A jelszó (tárolás titkosítva javasolt)
+
+
+
+# ────────── Alexa (opcionális) ──────────
+
+alexa_nodered_url: "http://192.168.0.150:1880/speak"
+
+
+# ────────── Adatbázisok és logok ──────────
+
+URL_DB: "./data/url.db"
+seen_db: "./data/seen.db"
+SmsDBPath: "./data/sms.db"
+LogDir: "./logs"
+data_dir: "./data"
+data_directory: "./data"
+jellyfin_db_path: "/var/lib/jellyfin/data/jellyfin.db"
+movie_db_path: "./data/movies.db"
+ora_db_file: "./data/ora.db"
+ReconOnDiscon: "60s"            # automatikus újracsatlakozás 60 mp után
+search_notification_delay: 1m
+
+# ────────── Plugin időzítések ──────────
+
+# ─── Update Topic ───
+
+topic_update_interval: "12h" # Update topic on console evry "12h" && "2h30m" && "30m" && "48h" for 2 day
+
+#─── NévNap Plugin Időzítők ───
+
+NevnapReggel: "07:30"
+NevnapEste: "21:40"
+NevnapChannels:
+  - "#Magyar"
+#  - "142*************399"
+# ─── Ping Plugin Időzítők───
+
+Ping: "30s"                    # felhasználói !ping parancs várakozási ideje
+
+# ─── Székelyhon Hírek Plugin ───
+
+SzekelyhonChannels:
+  - "#Magyar"
+  - "142*************399"
+SzekelyhonInterval: 90m        # minden 120 percben (2 óra)
+SzekelyhonStartHour: 7          # reggel 7-től
+SzekelyhonEndHour: 22           # este 22-ig
+
+#─── Viccek Plugin ───
+
+JokeChannels:
+  - "#Magyar"
+  - "#YnM"
+  - "142*************399"
+JokeSendTime: "08:00"           # Óra:perc formátumban, 24 órás
+
+
+# ────────── Movie plugin configuration ──────────
+
+
+movie_requests_channel: "#Magyar"
+
+movie_plugin:
+  post_time: "20:00"
+  post_chan: 
+  - "#Magyar"
+  - "142*************399"
+  post_nick: "ML"
+
+# ────────── Media Ajanló ──────────
+
+media_ajanlat:
+  channel: 
+  - "#Magyar"
+  - "142*************399"
+  time: "21:35"
+
+media_upload:
+  enabled: false
+  channels:
+    - "#Magyar"
+    - "142*************399"
+  interval_minutes: 1
+  jellyfin_db: "/var/lib/jellyfin/data/jellyfin.db"
+  sent_dates_file: "./data/sent_dates.json"
+
+media_activity:
+  enabled: false
+  jellyfin_db_path: "/var/lib/jellyfin/data/jellyfin.db"
+  check_interval: 300
+  irc_channel: "#YnM"
+  secondary_channel: "#YnM"
+  online_cooldown: 2   # órában
+  base_data_dir: "./data"
+  notification_url: "https://bot.ynm.hu/topmedia"
+# ────────── Óra plugin ──────────
+
+orachan:
+  - "#Magyar"
+  - "#YnM"
+  - "142*************399"
+
+
+
+# ────────── YnM kiegészítők ──────────
+huntorrent_chat:
+  channels:
+  - "#YnM"
+#    - "#test"  # opcionális több csatorna
+  url: "https://huntorrent.org/uzenofal.php"
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36"
+  cookie: "***"
+
+# ──── Weather Plugin ────
+
+weather:
+  weatherAPIKey: "*******"
+  defaultLocation: "Budapest"
+  units: "metric"
+  language: "hu"
+
+# ──── Git Plugin ────
+
+GitPlugin:
+  channel:
+#      - "#Magyar"
+      - "#YnM"
+      - "142*************399"
+  apiURL: "https://git.ynm.hu/api/v1/repos/Markus/YnM-Go/commits"
+
+# ──── IMDB Plugin ────
+
+imdb:
+  api_key: "*******"
+  trigger: "!"
+  default_lang: "hu"
+  num_list: 1
+  rating_symbol: "★"
+  
+# ──── GPT Plugin ────
+
+openai:
+  api_key: "***"
+  
+# YouTube plugin
+YtApi: "*****"
+YtChannels:
+  - "#Magyar"
+  - "#YnM"
+#  - "142*************399"
+# ──── Fail2Ban Plugin ────
+Fail2Ban:
+  log: "/var/log/fail2ban.log"
+  channel: 
+  - "#YnM"
+# ────  WebHook YnM Media  ────
+
+YnM_WebHook:
+  AuthenticationSuccess: 
+    - "#YnM"
+  PlaybackStart: 
+    - "#YnM"
+  PlaybackStop: 
+    - "#YnM"
+  PluginInstalling: 
+    - "#YnM"
+  PluginInstalled: 
+    - "#YnM"
+  ItemDeleted: 
+    - "#YnM"
+  UserCreated: 
+    - "#YnM"
+    - "#Magyar"
+  UserPasswordChanged: 
+    - "#YnM"
+    - "#Magyar"
+  UserDeleted: 
+    - "#YnM"
+    - "#Magyar"
+  ItemAdded: 
+    - "#YnM"
+  Unhandled: 
+    - "#YnM"
+  default: 
+    - "#YnM"
+  ExternalTrigger: 
+    - "#YnM"
+  Notify: 
+    - "#YnM"
+#    - "142*************399"
+
+  Kuma: 
+ #   - "#Magyar"
+    - "#YnM"
+#
+
+# ──── External Plugin ──── 
+ExternalTrigger:
+  enabled: false
+  webhook_url: "http://localhost:2020/webhook"  # A másik YnM bot webhook címe
+  rate_limit_seconds: 5
+  source_bot: "YnM"  # Ennek a botnak a neve
+  
+  # Csatornánkénti triggerek
+  channel_triggers:
+    "#torrent":
+      - "NCore"
+      - "Las Fierbinti"
+    
+  
+  # Globális triggerek (minden csatornán működnek)
+  global_triggers:
+ #   - ""
+    
+# ──── Legszebb Noták
+
+latest_music_channels:
+  - "#Magyar"                    # IRC csatorna
+  - "142*************399"       # Discord csatorna ID
+latest_music_interval: "30m"    # Ellenőrzési intervallum
+
+# Facebook Auto-Poster
+facebook_enabled: false
+facebook_script_path: "/home/bot/facebook-poster/postfb.js"
+
+
+# ──── Telegram
+telegram:
+  enabled: false
+  min_interval: "10m"
+  bot_token: "84******:AAELY*****"
+  chat_id: "68526****"
+  channel_id: "-100******"
+  
+  
+# ──── Mp3Scanner
+
+Mp3Scanner:
+  scan_dir: /media/F5/zsolt/mp3
+  log_file: /home/bot/ID/mp3.log
+  test_log_file: /home/bot/ID/mp3_test.log
+  report_chan:
+    - "#Magyar"                              # IRC csatorna
+    - "142*************399"      # Discord csatorna ID
+  fpcalc_path: /usr/bin/fpcalc
+  score_threshold: 0.8
+  supported_ext:
+    - .mp3
+    - .flac
+    - .wav
+    - .m4a
+    - .aac
+    - .ogg
+  acoustid_api_key: NFT*****
+  auto_scan_enabled: false
+  scan_interval: "24h"    # 24 óránként
+  # scan_interval: "168h"  # Hetente (168 óra = 7 nap)
+  # scan_interval: "12h"   # 12 óránként
+  scan_time: "02:00"      # 02:00-kor induljon
+  quiet_mode: false
+  
+  
+botmanager:
+  config_path: "YnMConfig/slaves.yaml"
+  

@@ -1,0 +1,9 @@
+DB_PATH: "./data/forum.db"
+RSS_URL: "https://forum.ynm.hu/latest.rss"
+CHANNELS:
+  - "#Magyar"
+  - "#YnM"
+DISCORD_CHANNELS:
+  - "1425034642914021399"
+  
+INTERVAL_S: 300

@@ -1,0 +1,49 @@
+# web-api.yaml - Web API Configuration
+web:
+  port: 2525
+  
+  # Weboldal URL
+  website_url: "https://ynm-go.ynm.hu"
+  
+  # ⚠️⚠️⚠️ DO NOT CHANGE ROUTING UNLESS YOU KNOW WHAT YOU'RE DOING! ⚠️⚠️⚠️
+  # Changing these prefixes will break the web interface and PHP proxy!
+  # PHP proxy expects: /api prefix for everything!  
+  
+  # API routing
+  routing:
+    public_prefix: "/api"
+    admin_prefix: "/api"
+    bot_prefix: "/api"
+  # These must match the PHP proxy configuration in api.php!
+  # Changing these requires updating both Go code AND PHP proxy!
+  
+  
+  # Engedélyezett origins (CORS)
+  allowed_origins:
+    - "https://bot.ynm.hu"
+    - "https://ynm-go.ynm.hu"
+    - "http://localhost:3000"
+  
+  # Session settings
+  session:
+    lifetime: 3600
+    cleanup_interval: 300
+  
+  # Password settings
+  password:
+    max_uses: 100
+    expiry_minutes: 60
+    expiry_options:
+      30: "30 perc"
+      60: "1 óra"
+      180: "3 óra"
+      1440: "24 óra"
+      10080: "1 hét"
+      43200: "1 hónap"
+      525600: "1 év"
+      0: "Soha ne járjon le"
+  
+  # Rate limiting
+  rate_limit:
+    enabled: true
+    requests_per_minute: 60

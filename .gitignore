@@ -1,0 +1,54 @@
+# Bináris fájlok és build outputok
+/YnM-Go
+
+# Adat és log fájlok
+/data/
+!data/.keep  # üres mappa megtartása, ha kell
+/log/
+!log/.keep
+/logs/
+!logs/.keep
+
+# Konfigurációs fájlok – csak az example és config.go mehet fel
+/YnMConfig/*
+!YnMConfig/
+!YnMConfig/config.go
+!YnMConfig/example-ynm.yaml
+!YnMConfig/example-web-api.yaml
+!YnMConfig/forum.yaml
+!YnMConfig/example-rss.yaml
+!YnMConfig/.keep
+
+# Privát fájlformátumok, ne kerüljenek a repóba
+*.log
+*.swp
+*.bak
+*.pem
+*.key
+*.asc
+*.env
+*.sh
+ynm.yaml
+# IDE és szerkesztő fájlok
+.idea/
+.vscode/
+
+# Operációs rendszer saját fájljai
+.DS_Store
+Thumbs.db
+
+# Egyéb temp fájlok
+*.tmp
+*.old
+*.orig
+*.save
+*.gitconfig
+*.github
+.forgejo/
+version-manager.sh
+version.sh
+nginx.conf
+.version
+Makefile
+*.ynm_secret_YnM-Go-YnM-Go
+
