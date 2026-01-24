@@ -450,91 +450,96 @@ func (c *Client) Part(channel string, reason string) {
 // ─────────────────────── WHOIS Handling ─────────────────────────
 
 func (c *Client) GetWhoisData(nick string) *WhoisData {
-	respChan := make(chan *WhoisData, 1)
-	
-	c.whoisMutex.Lock()
-	if c.whoisChannels == nil {
-		c.whoisChannels = make(map[string][]chan *WhoisData)
-	}
-	c.whoisChannels[nick] = append(c.whoisChannels[nick], respChan)
-	c.whoisMutex.Unlock()
-	
-	// WHOIS küldése a lock UTÁN
-	c.SendRawSilent(fmt.Sprintf("WHOIS %s", nick))
-	
-	// Timeout kezelés
-	select {
-	case data := <-respChan:
-		return data
-	case <-time.After(5 * time.Second):
-		// Cleanup: egyszerűen bezárjuk és jelezzük a törlést
-		c.whoisMutex.Lock()
-		if chans, ok := c.whoisChannels[nick]; ok {
-			// Új slice készítése a csatorna nélkül
-			newChans := make([]chan *WhoisData, 0, len(chans)-1)
-			for _, ch := range chans {
-				if ch != respChan {
-					newChans = append(newChans, ch)
-				}
-			}
-			if len(newChans) == 0 {
-				delete(c.whoisChannels, nick)
-			} else {
-				c.whoisChannels[nick] = newChans
-			}
-		}
-		c.whoisMutex.Unlock()
-		close(respChan) // Bezárjuk, hogy a HandleWhoisData ne küldjön bele
-		return nil
-	}
+    nickKey := strings.ToLower(strings.TrimSpace(nick))
+    respChan := make(chan *WhoisData, 1)
+
+    c.whoisMutex.Lock()
+    if c.whoisChannels == nil {
+        c.whoisChannels = make(map[string][]chan *WhoisData)
+    }
+    c.whoisChannels[nickKey] = append(c.whoisChannels[nickKey], respChan)
+    c.whoisMutex.Unlock()
+
+    // WHOIS küldése a lock UTÁN
+    c.SendRawSilent(fmt.Sprintf("WHOIS %s", nickKey))
+
+    select {
+    case data := <-respChan:
+        return data
+    case <-time.After(5 * time.Second):
+        // cleanup
+        c.whoisMutex.Lock()
+        if chans, ok := c.whoisChannels[nickKey]; ok {
+            newChans := make([]chan *WhoisData, 0, len(chans))
+            for _, ch := range chans {
+                if ch != respChan {
+                    newChans = append(newChans, ch)
+                }
+            }
+            if len(newChans) == 0 {
+                delete(c.whoisChannels, nickKey)
+            } else {
+                c.whoisChannels[nickKey] = newChans
+            }
+        }
+        c.whoisMutex.Unlock()
+
+        close(respChan)
+        return nil
+    }
 }
+
 func (c *Client) GetWhoisChannel(nick string) chan *WhoisData {
+	nickKey := strings.ToLower(strings.TrimSpace(nick))
+
 	c.whoisMutex.Lock()
 	defer c.whoisMutex.Unlock()
-	
+
 	if c.whoisChannels == nil {
 		c.whoisChannels = make(map[string][]chan *WhoisData)
 	}
-	
+
 	respChan := make(chan *WhoisData, 1)
-	c.whoisChannels[nick] = append(c.whoisChannels[nick], respChan)
-	
+	c.whoisChannels[nickKey] = append(c.whoisChannels[nickKey], respChan)
+
 	return respChan
 }
 
 func (c *Client) CleanupWhoisChannel(nick string) {
-	c.whoisMutex.Lock()
-	defer c.whoisMutex.Unlock()
-	
-	if c.whoisChannels != nil {
-		delete(c.whoisChannels, nick)
-	}
+    nickKey := strings.ToLower(strings.TrimSpace(nick))
+
+    c.whoisMutex.Lock()
+    defer c.whoisMutex.Unlock()
+
+    if c.whoisChannels != nil {
+        delete(c.whoisChannels, nickKey)
+    }
 }
 
 func (c *Client) RequestWhois(nick string) {
-	c.SendRawSilent("WHOIS " + nick)
+    nickKey := strings.ToLower(strings.TrimSpace(nick))
+    c.SendRawSilent("WHOIS " + nickKey)
 }
 
 func (c *Client) HandleWhoisData(whois *WhoisData) {
-	c.whoisMutex.Lock()
-	chans, ok := c.whoisChannels[whois.Nick]
-	if ok {
-		delete(c.whoisChannels, whois.Nick)
-	}
-	c.whoisMutex.Unlock()
-	
-	if ok {
-		// Lock nélkül küldünk, gyorsabb
-		for _, ch := range chans {
-			select {
-			case ch <- whois:
-				// Sikeres küldés
-			default:
-				// Csatorna már be van zárva (timeout) vagy tele van
-			}
-			close(ch)
-		}
-	}
+    nickKey := strings.ToLower(strings.TrimSpace(whois.Nick))
+
+    c.whoisMutex.Lock()
+    chans, ok := c.whoisChannels[nickKey]
+    if ok {
+        delete(c.whoisChannels, nickKey)
+    }
+    c.whoisMutex.Unlock()
+
+    if ok {
+        for _, ch := range chans {
+            select {
+            case ch <- whois:
+            default:
+            }
+            close(ch)
+        }
+    }
 }
 // ─────────────────────── NickServ Authentication ─────────────────────────
 

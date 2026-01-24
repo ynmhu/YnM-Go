@@ -193,22 +193,14 @@ func (c *Client) handleRawMessage(line string, receivedTime time.Time) {
     if strings.Contains(line, " MODE ") {
      //   fmt.Printf("[DEBUG] MODE üzenet érkezett: %s\n", line)
     }
-    
-    // ========== ELŐSZÖR: USER MODE VÁLTOZTATÁSOK ==========
-    // Ezeket KÖRÜL kell mennünk, mielőtt numeric responses elkapná
-    // Csak user általi MODE változtatás, nem server numeric response
-    if strings.HasPrefix(line, ":") && strings.Contains(line, " MODE ") {
-        parts := strings.Fields(line)
-        if len(parts) >= 3 && parts[1] == "MODE" {
-            // Ellenőrizzük, hogy nem numeric response-e (pl. "324" vagy "005")
-            if _, err := strconv.Atoi(parts[1]); err != nil {
-                // Ez user MODE változtatás
-                fmt.Printf("[HANDLEMODE] User MODE változtatás kezelése: %s\n", line)
-                c.handleMode(line)
-                // NE return-oljunk itt, hogy az OnMessage callback is működjön
-            }
-        }
-    }
+
+	if strings.HasPrefix(line, ":") && strings.Contains(line, " MODE ") {
+		parts := strings.Fields(line)
+		if len(parts) >= 2 && parts[1] == "MODE" {
+			c.handleMode(line)
+			return
+		}
+	}
 
     // ========== UNDERNET AZONOSÍTÁS DETEKTÁLÁS ==========
     // Detektáld a sikeres Undernet azonosítást
@@ -285,6 +277,7 @@ func (c *Client) handleRawMessage(line string, receivedTime time.Time) {
         return
         
     case strings.Contains(line, " 311 "):
+	log.Printf("[WHOIS-RAW-311] %s", line)
         c.handleWhoisUser(line)
         return
         
@@ -301,6 +294,7 @@ func (c *Client) handleRawMessage(line string, receivedTime time.Time) {
         return
 		
     case strings.Contains(line, " 318 "):
+	 log.Printf("[WHOIS-RAW-318] %s", line)
         c.handleEndOfWhois(line)
         return
         
@@ -1102,73 +1096,58 @@ func (c *Client) handleWhoResponse(line string) {
     }
 }
 func (c *Client) handleWhoisUser(line string) {
-	parts := strings.SplitN(line, " ", 8)
-	if len(parts) < 8 {
-		return
-	}
+    parts := strings.SplitN(line, " ", 8)
+    if len(parts) < 8 {
+        return
+    }
 
-	nick := parts[3]
-	username := parts[4]
-	hostname := parts[5]
-	realname := strings.TrimPrefix(parts[7], ":")
+    nick := parts[3]
+    nickKey := strings.ToLower(nick)
 
-	c.whoisMutex.Lock()
-	if _, exists := c.whoisData[nick]; !exists {
-		c.whoisData[nick] = &WhoisData{
-			Nick:     nick,
-			Username: username,
-			Hostname: hostname,
-			Realname: realname,
-			Hostmask: fmt.Sprintf("%s!%s@%s", nick, username, hostname),
-			Channels: make([]string, 0),
-			Extra:    make(map[string]string),
-			Raw:      make([]string, 0),
-		}
-	}
-	c.whoisData[nick].Raw = append(c.whoisData[nick].Raw, line)
-	c.whoisMutex.Unlock()
+    username := parts[4]
+    hostname := parts[5]
+    realname := strings.TrimPrefix(parts[7], ":")
+
+    c.whoisMutex.Lock()
+    defer c.whoisMutex.Unlock()
+
+    if _, exists := c.whoisData[nickKey]; !exists {
+        c.whoisData[nickKey] = &WhoisData{
+            Nick:     nick, // eredeti case
+            Username: username,
+            Hostname: hostname,
+            Realname: realname,
+            Hostmask: fmt.Sprintf("%s!%s@%s", nick, username, hostname),
+            Channels: make([]string, 0),
+            Extra:    make(map[string]string),
+            Raw:      make([]string, 0),
+        }
+    }
+
+    c.whoisData[nickKey].Raw = append(c.whoisData[nickKey].Raw, line)
 }
 
 func (c *Client) handleWhoisServer(line string) {
-	// Parse: :server 312 mynick nick server :server info
-	parts := strings.SplitN(line, " ", 6)
-	if len(parts) < 6 {
-		return
-	}
+    // :server 312 mynick nick server :server info
+    parts := strings.SplitN(line, " ", 6)
+    if len(parts) < 6 {
+        return
+    }
 
-	nick := parts[3]
-	server := parts[4]
-	serverInfo := strings.TrimPrefix(parts[5], ":")
+    nick := parts[3]
+    nickKey := strings.ToLower(nick)
 
-	c.whoisMutex.Lock()
-	defer c.whoisMutex.Unlock()
+    server := parts[4]
+    serverInfo := strings.TrimPrefix(parts[5], ":")
 
-	if data, exists := c.whoisData[nick]; exists {
-		data.Server = server
-		data.ServerInfo = serverInfo
-		data.Raw = append(data.Raw, line)
-	}
-}
+    c.whoisMutex.Lock()
+    defer c.whoisMutex.Unlock()
 
-func (c *Client) handleWhoisIdle(line string) {
-	// Parse: :server 317 mynick nick idle signon :seconds idle, signon time
-	parts := strings.Fields(line)
-	if len(parts) < 6 {
-		return
-	}
-
-	nick := parts[3]
-	idle, _ := strconv.Atoi(parts[4])
-	signon, _ := strconv.ParseInt(parts[5], 10, 64)
-
-	c.whoisMutex.Lock()
-	defer c.whoisMutex.Unlock()
-
-	if data, exists := c.whoisData[nick]; exists {
-		data.Idle = idle
-		data.SignonTime = signon
-		data.Raw = append(data.Raw, line)
-	}
+    if data, exists := c.whoisData[nickKey]; exists {
+        data.Server = server
+        data.ServerInfo = serverInfo
+        data.Raw = append(data.Raw, line)
+    }
 }
 
 func (c *Client) handleWhoisChannels(line string) {
@@ -1179,13 +1158,14 @@ func (c *Client) handleWhoisChannels(line string) {
 	}
 
 	nick := parts[3]
+	nickKey := strings.ToLower(nick)
+
 	channelsStr := strings.TrimPrefix(parts[4], ":")
 
 	c.whoisMutex.Lock()
 	defer c.whoisMutex.Unlock()
 
-	if data, exists := c.whoisData[nick]; exists {
-		// Remove mode prefixes (@, +, %, etc.)
+	if data, exists := c.whoisData[nickKey]; exists {
 		for _, ch := range strings.Fields(channelsStr) {
 			cleanChan := strings.TrimLeft(ch, "@+%&~")
 			data.Channels = append(data.Channels, cleanChan)
@@ -1194,61 +1174,83 @@ func (c *Client) handleWhoisChannels(line string) {
 	}
 }
 
+
 func (c *Client) handleWhoisAccount(line string) {
-	// Parse: :server 330 mynick nick account :is logged in as
-	parts := strings.Fields(line)
-	if len(parts) < 5 {
-		return
-	}
+    parts := strings.Fields(line)
+    if len(parts) < 5 {
+        return
+    }
 
-	nick := parts[3]
-	account := parts[4]
+    nickKey := strings.ToLower(parts[3])
+    account := parts[4]
 
-	c.whoisMutex.Lock()
-	defer c.whoisMutex.Unlock()
+    c.whoisMutex.Lock()
+    defer c.whoisMutex.Unlock()
 
-	if data, exists := c.whoisData[nick]; exists {
-		data.Account = account
-		data.IsLoggedIn = true
-		data.Raw = append(data.Raw, line)
-	}
+    if data, exists := c.whoisData[nickKey]; exists {
+        data.Account = account
+        data.IsLoggedIn = true
+        data.Raw = append(data.Raw, line)
+    }
 }
 
 func (c *Client) handleWhoisSecure(line string) {
-	// Parse: :server 671 mynick nick :is using a secure connection
-	parts := strings.Fields(line)
-	if len(parts) < 4 {
-		return
-	}
+    parts := strings.Fields(line)
+    if len(parts) < 4 {
+        return
+    }
 
-	nick := parts[3]
+    nickKey := strings.ToLower(parts[3])
 
-	c.whoisMutex.Lock()
-	defer c.whoisMutex.Unlock()
+    c.whoisMutex.Lock()
+    defer c.whoisMutex.Unlock()
 
-	if data, exists := c.whoisData[nick]; exists {
-		data.IsSecure = true
-		data.Raw = append(data.Raw, line)
-	}
+    if data, exists := c.whoisData[nickKey]; exists {
+        data.IsSecure = true
+        data.Raw = append(data.Raw, line)
+    }
+}
+func (c *Client) handleWhoisIdle(line string) {
+    parts := strings.Fields(line)
+    if len(parts) < 6 {
+        return
+    }
+
+    nickKey := strings.ToLower(parts[3])
+
+    idle, err1 := strconv.Atoi(parts[4])
+    signon, err2 := strconv.ParseInt(parts[5], 10, 64)
+    if err1 != nil || err2 != nil {
+        return
+    }
+
+    c.whoisMutex.Lock()
+    defer c.whoisMutex.Unlock()
+
+    if data, exists := c.whoisData[nickKey]; exists {
+        data.Idle = idle
+        data.SignonTime = signon
+        data.Raw = append(data.Raw, line)
+    }
 }
 
 func (c *Client) handleWhoisOperator(line string) {
-	// Parse: :server 313 mynick nick :is an IRC operator
-	parts := strings.Fields(line)
-	if len(parts) < 4 {
-		return
-	}
+    parts := strings.Fields(line)
+    if len(parts) < 4 {
+        return
+    }
 
-	nick := parts[3]
+    nickKey := strings.ToLower(parts[3])
 
-	c.whoisMutex.Lock()
-	defer c.whoisMutex.Unlock()
+    c.whoisMutex.Lock()
+    defer c.whoisMutex.Unlock()
 
-	if data, exists := c.whoisData[nick]; exists {
-		data.IsOper = true
-		data.Raw = append(data.Raw, line)
-	}
+    if data, exists := c.whoisData[nickKey]; exists {
+        data.IsOper = true
+        data.Raw = append(data.Raw, line)
+    }
 }
+
 func (c *Client) handleEndOfWho(line string) {
     // :server 315 mynick #channel :End of WHO list
     parts := strings.Fields(line)
@@ -1263,30 +1265,29 @@ func (c *Client) handleEndOfWho(line string) {
 }
 
 func (c *Client) handleEndOfWhois(line string) {
-	
-	parts := strings.Fields(line)
-	if len(parts) < 4 {
-		return
-	}
+    parts := strings.Fields(line)
+    if len(parts) < 4 {
+        return
+    }
 
-	nick := parts[3]
+    nickKey := strings.ToLower(parts[3])
 
-	c.whoisMutex.Lock()
-	data := c.whoisData[nick]
-	chans := c.whoisChannels[nick]
-	delete(c.whoisData, nick)
-	delete(c.whoisChannels, nick)
-	c.whoisMutex.Unlock()
+    c.whoisMutex.Lock()
+    data := c.whoisData[nickKey]
+    chans := c.whoisChannels[nickKey]
+    delete(c.whoisData, nickKey)
+    delete(c.whoisChannels, nickKey)
+    c.whoisMutex.Unlock()
 
-	if chans != nil {
-		for _, ch := range chans {
-			select {
-			case ch <- data:
-			default:
-			}
-			close(ch)
-		}
-	}
+    if chans != nil {
+        for _, ch := range chans {
+            select {
+            case ch <- data:
+            default:
+            }
+            close(ch)
+        }
+    }
 }
 
 func (c *Client) handleSASL(line string) bool {
@@ -1496,7 +1497,8 @@ func parseMessage(line string) *Message {
             return nil
         }
         target := parts[2]
-        text := strings.Join(parts[3:], " ")[1:] // Remove leading ":"
+        raw := strings.Join(parts[3:], " ")
+		text := strings.TrimPrefix(raw, ":")
         
         return &Message{
             Sender:   sender,
@@ -1517,7 +1519,8 @@ func parseMessage(line string) *Message {
         modes := parts[3]
         args := ""
         if len(parts) > 4 {
-            args = strings.Join(parts[4:], " ")[1:] // Remove leading ":" if present
+            rawArgs := strings.Join(parts[4:], " ")
+			args = strings.TrimPrefix(rawArgs, ":")
         }
         
         return &Message{

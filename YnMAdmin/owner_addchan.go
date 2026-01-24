@@ -22,7 +22,7 @@ import (
 	"git.ynm.hu/markus/YnM-Go/YnMLang"
 )
 
-// AddRoom csatorna hozzáadása csak ConsoleChannel-ból
+
 func (p *YnmAdminPlugin) handleAddRoomCommand(fullHostmask string, newChannel string, issuingChannel string) string {
 	nick := strings.Split(fullHostmask, "!")[0]
 	simplifiedHostmask := YnMModule.SimplifyHostmask(fullHostmask)
@@ -68,9 +68,7 @@ func (p *YnmAdminPlugin) handleRemoveRoomCommand(fullHostmask, channelName, issu
 		return p.GetMessage(nick, YnMLang.MsgownerOnly)
 	}
 
-	// Ellenőrzés: csak ConsoleChannel lehet
 	if issuingChannel != "" && strings.ToLower(issuingChannel) != strings.ToLower(p.Cfg.ConsoleChannel) {
-		// Lekérjük a ConsoleChannel owner nickjét
 		channelInfo, err := p.Db.GetChannel(p.Cfg.ConsoleChannel)
 		var ownerNick string
 		if err != nil || channelInfo == nil || channelInfo.Owner == nil {
@@ -115,7 +113,6 @@ func (p *YnmAdminPlugin) onEndOfWho(channel string) {
 
     delete(p.channelsPending, chKey)
 
-    // ha még van pending, várunk tovább
     if len(p.channelsPending) > 0 {
         p.channelsMu.Unlock()
         return
@@ -126,7 +123,6 @@ func (p *YnmAdminPlugin) onEndOfWho(channel string) {
     p.channelsReplyTo = ""
     p.channelsMu.Unlock()
 
-    // minden WHO kész -> küldjük a választ
     p.sendChannelsWithPrefixes(replyTo)
 }
 
@@ -153,7 +149,7 @@ func (p *YnmAdminPlugin) sendChannelsWithPrefixes(target string) {
     msg := fmt.Sprintf("A bot jelenlegi csatornái: %s", strings.Join(channelList, ", "))
     p.Bot.SendMessage(target, msg)
 }
-// HandleChannelsCommand kezeli az !channels parancsot (csak owner)
+
 func (p *YnmAdminPlugin) handleChannelsCommand(sender, issuingChannel string) string {
     nick := strings.Split(sender, "!")[0]
     replyTo := strings.TrimSpace(issuingChannel)
@@ -181,20 +177,13 @@ func (p *YnmAdminPlugin) handleChannelsCommand(sender, issuingChannel string) st
         return ""
     }
 
-    // ✅ AZONNALI VÁLASZ - WHO NÉLKÜL!
-    // A prefix már a NAMES-ből jön, amikor JOIN-oltunk
     p.sendChannelsWithPrefixes(replyTo)
     return ""
 }
 
-// ===== 2. JAVÍTOTT sendChannelsWithPrefixes =====
-
-
-
-// ===== 3. getBotPrefixInChannel HELPER =====
-
 func (p *YnmAdminPlugin) getBotPrefixInChannel(channel, botNick string) string {
     // 1️⃣ Először nézzük a NAMES cache-ből (handleNamesReply)
+	channel = strings.ToLower(strings.TrimSpace(channel))
     prefix := p.Bot.GetMyPrefix(channel)
     if prefix != "" {
         return prefix
