@@ -17,6 +17,7 @@ import (
     "time"
     "sync"
     "strings"
+	"database/sql"
     "git.ynm.hu/markus/YnM-Go/YnMIrC"
     "git.ynm.hu/markus/YnM-Go/YnMAdmin"
     "git.ynm.hu/markus/YnM-Go/YnMConfig"
@@ -34,6 +35,7 @@ type TopicUpdaterPlugin struct {
     updateInProgress map[string]bool 
     updateInterval time.Duration
     targetChannels []string 
+    db          *sql.DB
 }
 
 func NewTopicUpdaterPlugin(bot *YnMIrC.Client, cfg *YnMConfig.Config, adminPlugin *owner.YnmAdminPlugin) *TopicUpdaterPlugin {
@@ -49,11 +51,17 @@ func NewTopicUpdaterPlugin(bot *YnMIrC.Client, cfg *YnMConfig.Config, adminPlugi
     if len(cfg.TopicOtherChannels) > 0 {
         targetChannels = append(targetChannels, cfg.TopicOtherChannels...)
     }
+    
+    var db *sql.DB
+    if adminPlugin != nil && adminPlugin.Db != nil {
+        db = adminPlugin.Db.SQL  // <-- ITT A JAVÍTÁS: SQL mező
+    }
 
     return &TopicUpdaterPlugin{
         bot:              bot,
         cfg:              cfg,
         adminPlugin:      adminPlugin,
+        db:               db,
         startTime:        time.Now(),
         updateInterval:   updateInterval,
         targetChannels:   targetChannels,
@@ -62,13 +70,77 @@ func NewTopicUpdaterPlugin(bot *YnMIrC.Client, cfg *YnMConfig.Config, adminPlugi
     }
 }
 // Initialize - Csatlakozáskor indítjuk
+// Initialize - Csatlakozáskor indítjuk
 func (p *TopicUpdaterPlugin) Initialize() {
     go func() {
         time.Sleep(10 * time.Second)
+        
+        // 1. Ellenőrizzük és frissítjük a topic-ot
         p.checkAndUpdateTopic()
+        
+        // 2. Szinkronizáljuk az adatbázissal
+        if p.db != nil {
+            count, err := p.SyncAllTopicsToDatabase()
+            if err != nil {
+                fmt.Printf("[TopicUpdater] Initial database sync failed: %v\n", err)
+            } else {
+                fmt.Printf("[TopicUpdater] Initial database sync: %d channels updated\n", count)
+            }
+        }
     }()
 }
-
+// updateTopicInDatabase - Topic mentése az adatbázisba
+func (p *TopicUpdaterPlugin) updateTopicInDatabase(channel string, topic string) error {
+    if p.db == nil {
+        return fmt.Errorf("database not available")
+    }
+    
+    // Bot nick meghatározása
+    botNick := p.bot.GetNick()
+    
+    // Ellenőrizzük, hogy létezik-e a csatorna az adatbázisban
+    var exists bool
+    err := p.db.QueryRow("SELECT EXISTS(SELECT 1 FROM channels WHERE name = ?)", channel).Scan(&exists)
+    if err != nil {
+        return fmt.Errorf("error checking channel existence: %v", err)
+    }
+    
+    if exists {
+        // Frissítés, ha már létezik
+        _, err = p.db.Exec(`
+            UPDATE channels 
+            SET current_topic = ?,
+                topic_set_by = ?,
+                topic_set_at = datetime('now')
+            WHERE name = ?
+        `, topic, botNick, channel)
+        if err != nil {
+            return fmt.Errorf("error updating topic in database: %v", err)
+        }
+        fmt.Printf("[TopicUpdater] Topic updated in database for channel: %s\n", channel)
+    } else {
+        // Új bejegyzés, ha nem létezik
+        // GetIdent és GetHost helyett fix értékek
+        _, err = p.db.Exec(`
+            INSERT INTO channels (
+                name, auto_op, auto_voice, auto_halfop, owner, owner_hostmask,
+                current_topic, topic_set_by, topic_set_at, current_modes, created_at
+            ) VALUES (?, 0, 0, 0, ?, ?, ?, ?, datetime('now'), '', datetime('now'))
+        `, 
+            channel, 
+            botNick, 
+            botNick + "@bot.ynm.hu", // Egyszerű hostmask
+            topic, 
+            botNick)
+        
+        if err != nil {
+            return fmt.Errorf("error inserting topic into database: %v", err)
+        }
+        fmt.Printf("[TopicUpdater] New channel added to database: %s\n", channel)
+    }
+    
+    return nil
+}
 // checkAndUpdateTopic - Ellenőrzi, hogy OP-e és frissíti a topicot
 func (p *TopicUpdaterPlugin) checkAndUpdateTopic() {
     for _, channel := range p.targetChannels {
@@ -92,9 +164,23 @@ func (p *TopicUpdaterPlugin) updateChannelTopic(channel string) {
     }()
     
     topic := p.generateTopic()
+    
+    // 1. Topic küldése az IRC-be
     p.bot.SendRaw(fmt.Sprintf("TOPIC %s :%s", channel, topic))
     
-    time.Sleep(3 * time.Second)
+    time.Sleep(3 * time.Second) // Várunk egy kicsit
+    
+    // 2. Mentés az adatbázisba
+    err := p.updateTopicInDatabase(channel, topic)
+    if err != nil {
+        fmt.Printf("[TopicUpdater] Database update failed for %s: %v\n", channel, err)
+        // Visszaadjuk az eredményt a console channel-be (opció)
+        if channel == p.cfg.ConsoleChannel {
+            p.bot.SendRaw(fmt.Sprintf("PRIVMSG %s :Database update failed: %v", channel, err))
+        }
+    } else {
+        fmt.Printf("[TopicUpdater] Topic saved to database for channel: %s\n", channel)
+    }
     
     p.mutex.Lock()
     p.isOp[channel] = true
@@ -103,6 +189,7 @@ func (p *TopicUpdaterPlugin) updateChannelTopic(channel string) {
     }
     p.mutex.Unlock()
 }
+
 func (p *TopicUpdaterPlugin) generateTopic() string {
     uptime := p.formatUptime()
     version := owner.YnMVersion
@@ -247,42 +334,69 @@ func (p *TopicUpdaterPlugin) HandleMessage(msg YnMIrC.Message) string {
             return ""
         }
         
-        message := msg.Params[1]
-        if strings.HasPrefix(message, ":") {
-            message = message[1:]
-        }
+    message := msg.Params[1]
+    if strings.HasPrefix(message, ":") {
+        message = message[1:]
+    }
+    
+    if strings.HasPrefix(message, "!topic") {
+        parts := strings.Fields(message)
         
-        if strings.HasPrefix(message, "!topic") {
-            parts := strings.Fields(message)
+        if len(parts) == 1 {
+            // !topic - minden konfigurált csatornára
+            p.mutex.RLock()
+            consoleUpdateInProgress := p.updateInProgress[p.cfg.ConsoleChannel]
+            targetChannels := p.targetChannels
+            p.mutex.RUnlock()
             
-            if len(parts) == 1 {
-                // !topic - minden konfigurált csatornára
-                p.mutex.RLock()
-                consoleUpdateInProgress := p.updateInProgress[p.cfg.ConsoleChannel]
-                targetChannels := p.targetChannels
-                p.mutex.RUnlock()
-                
-                if consoleUpdateInProgress {
-                    return "Update in progress..."
-                }
-                
-                // Mutasd meg, mely csatornákba frissít
-                response := fmt.Sprintf("Updating topic in %d channels: %v", 
-                    len(targetChannels), targetChannels)
-                go p.checkAndUpdateTopic()
-                return response
-                
-            } else if len(parts) >= 2 && parts[1] == "status" {
-                // !topic status - mutasd meg az állapotot
-                p.mutex.RLock()
-                status := fmt.Sprintf(
-                    "Config: Console=%s, OtherChannels=%v, TargetChannels=%v", 
-                    p.cfg.ConsoleChannel,
-                    p.cfg.TopicOtherChannels,
-                    p.targetChannels,
-                )
-                p.mutex.RUnlock()
-                return status
+            if consoleUpdateInProgress {
+                return "Update in progress..."
+            }
+            
+            // Adatbázis info hozzáadása a válaszhoz
+            dbStatus := "DB: ✓"
+            if p.db == nil {
+                dbStatus = "DB: ✗ (not connected)"
+            }
+            
+            response := fmt.Sprintf("Updating topic in %d channels: %v [%s]", 
+                len(targetChannels), targetChannels, dbStatus)
+            go p.checkAndUpdateTopic()
+            return response
+            
+        } else if len(parts) >= 2 && parts[1] == "db" {
+            // !topic db - adatbázis információ
+            if p.db == nil {
+                return "Database not connected"
+            }
+            
+            // Számláljuk, hány csatorna van az adatbázisban
+            var count int
+            err := p.db.QueryRow("SELECT COUNT(*) FROM channels").Scan(&count)
+            if err != nil {
+                return fmt.Sprintf("Database error: %v", err)
+            }
+            
+            return fmt.Sprintf("Database: %d channels stored", count)
+            
+        } else if len(parts) >= 2 && parts[1] == "status" {
+            // !topic status - mutasd meg az állapotot
+            p.mutex.RLock()
+            
+            dbStatus := "✓"
+            if p.db == nil {
+                dbStatus = "✗"
+            }
+            
+            status := fmt.Sprintf(
+                "Config: Console=%s, OtherChannels=%v, TargetChannels=%v | Database: %s", 
+                p.cfg.ConsoleChannel,
+                p.cfg.TopicOtherChannels,
+                p.targetChannels,
+                dbStatus,
+            )
+            p.mutex.RUnlock()
+            return status
                 
             } else if len(parts) >= 2 && parts[1] == "all" {
                 // !topic all - minden csatornára (alias)
@@ -321,6 +435,29 @@ func (p *TopicUpdaterPlugin) HandleMessage(msg YnMIrC.Message) string {
     return ""
 }
 
+// SyncAllTopicsToDatabase - Összes csatorna aktuális topic-jának szinkronizálása
+func (p *TopicUpdaterPlugin) SyncAllTopicsToDatabase() (int, error) {
+    if p.db == nil {
+        return 0, fmt.Errorf("database not available")
+    }
+    
+    count := 0
+    for _, channel := range p.targetChannels {
+        // Megpróbáljuk lekérni az aktuális topic-ot
+        // (Ez az IRC-től függ, hogy van-e ilyen lehetőség)
+        // Ha nincs közvetlen topic lekérés, akkor az ismert topic-ot mentjük
+        topic := p.generateTopic() // Vagy lekérjük valahonnan
+        
+        err := p.updateTopicInDatabase(channel, topic)
+        if err != nil {
+            fmt.Printf("[TopicUpdater] Failed to sync %s: %v\n", channel, err)
+        } else {
+            count++
+        }
+    }
+    
+    return count, nil
+}
 
 // Public methods
 func (p *TopicUpdaterPlugin) ForceUpdate() {

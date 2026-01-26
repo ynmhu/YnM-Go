@@ -321,6 +321,7 @@ func (p *YnMApiPlugin) startHTTPServer() {
     
     // ===== BOT CONTROL ENDPOINTS (MOD+) =====
     mux.HandleFunc(botPrefix+"/channels", corsHandler(p.requireRoleOrLocalhost(p.handleChannels, "vip", "mod", "admin", "owner")))
+	mux.HandleFunc(botPrefix+"/channels/topic", corsHandler(p.requireRoleOrLocalhost(p.handleChannelsTopic, "vip", "mod", "admin", "owner")))
     mux.HandleFunc(botPrefix+"/channels/sync", corsHandler(p.requireRoleOrLocalhost(p.handleChannelSync, "vip", "mod", "admin", "owner")))
     mux.HandleFunc(botPrefix+"/channels/detail", corsHandler(p.requireRoleOrLocalhost(p.handleChannelDetail, "vip", "mod", "admin", "owner")))
     mux.HandleFunc(botPrefix+"/control", corsHandler(p.requireRoleOrLocalhost(p.handleBotControl, "vip", "mod", "admin", "owner")))
@@ -382,6 +383,8 @@ func (p *YnMApiPlugin) startHTTPServer() {
     fmt.Println("\n  🤖 BOT CONTROL (MOD+):")
     fmt.Printf("    *      %s/channels\n", botPrefix)
     fmt.Printf("    POST   %s/channels/sync\n", botPrefix)
+	fmt.Printf("    GET    %s/channels/topic\n", botPrefix)
+	fmt.Printf("   POST    %s/channels/topic-update\n", botPrefix)
     fmt.Printf("    GET    %s/channels/detail\n", botPrefix)
     fmt.Printf("    POST   %s/control (owner)\n", botPrefix)
     fmt.Printf("    GET    %s/memory (owner)\n", botPrefix)

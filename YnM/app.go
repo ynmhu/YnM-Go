@@ -126,6 +126,7 @@ func (a *App) initialize() error {
         //log.Printf("*** OnChannelJoined: ApplySavedChannelModes hívása channel=%s ***", channel)
         
         a.adminDB.ApplySavedChannelModes(a.bot, channel)
+		a.adminDB.ApplySavedChannelTopicIfEmpty(a.bot, channel)
         
         //fmt.Printf("*** OnChannelJoined: ApplySavedChannelModes befejezve ***\n")
         

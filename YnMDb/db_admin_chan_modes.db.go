@@ -467,6 +467,7 @@ func (a *AdminDB) SetUserAutomode(nick, hostmask, channel string, autoOp, autoVo
     }
     return nil
 }
+
 func (a *AdminDB) UpdateChannelAutoModes(channelName string, permissions string) error {
 	autoOp := 0
 	autoVoice := 0
@@ -587,4 +588,106 @@ func (a *AdminDB) UpdateUserRoleInChannelWithModifiedBy(nick, hostmask, channel,
     
     _, err := a.db.Exec(query, role, modifiedBy, modifiedByHost, nick, channel, hostmask)
     return err
+}
+func (db *AdminDB) GetSavedTopic(channel string) (string, error) {
+    channel = normalizeChannelName(channel)
+
+    var t sql.NullString
+    err := db.db.QueryRow(`
+        SELECT current_topic
+        FROM channels
+        WHERE LOWER(name) = LOWER(?)
+    `, channel).Scan(&t)
+
+    if err == sql.ErrNoRows {
+        return "", nil
+    }
+    if err != nil {
+        return "", err
+    }
+    if !t.Valid {
+        return "", nil
+    }
+
+    topic := strings.TrimSpace(t.String)
+    if topic == "" || topic == "0" {
+        return "", nil
+    }
+    return topic, nil
+}
+func (db *AdminDB) ApplySavedChannelTopicIfEmpty(bot *YnMIrC.Client, channel string) {
+    channel = normalizeChannelName(channel)
+
+    // 1) DB topic
+    savedTopic, err := db.GetSavedTopic(channel)
+    if err != nil {
+        return
+    }
+    // ahol DB-ben üres/0 -> semmit
+    if savedTopic == "" {
+        return
+    }
+
+    // 2) Kérünk TOPIC-ot a szervertől és várjuk meg
+    topicReceived := make(chan *string, 1)
+
+    go func() {
+        timeout := time.After(2 * time.Second)
+        start := time.Now()
+
+        for {
+            select {
+            case <-timeout:
+                topicReceived <- nil
+                return
+            default:
+                channels := bot.Channels()
+                key := strings.ToLower(channel)
+
+                // ITT A LÉNYEG:
+                // ha van ilyen mező a channel state-ben:
+                // - Topic string
+                // - vagy HasTopic bool
+                // - vagy LastTopicTime, stb.
+                //
+
+
+				if ch, ok := channels[key]; ok {
+					t := strings.TrimSpace(ch.Topic) //
+					if t == "" || t == "0" {
+						empty := ""
+						topicReceived <- &empty
+					} else {
+						topicReceived <- &t
+					}
+					return
+				}
+
+                if time.Since(start) > 1500*time.Millisecond {
+                    topicReceived <- nil
+                    return
+                }
+                time.Sleep(100 * time.Millisecond)
+            }
+        }
+    }()
+
+    // TOPIC lekérés (sok hálózaton: "TOPIC #chan" -> 331/332 válasz)
+    bot.SendRaw(fmt.Sprintf("TOPIC %s", channel))
+
+	currentTopicPtr := <-topicReceived
+
+	// HA NEM TUDTUK LEKÉRNI (timeout / nincs adat) -> NE állítsunk semmit!
+	if currentTopicPtr == nil {
+		return
+	}
+
+	// 3) Ha már van topic -> nem nyúlunk hozzá
+	cur := strings.TrimSpace(*currentTopicPtr)
+	if cur != "" && cur != "0" {
+		return
+	}
+
+	// 4) Biztosan üres topic -> beállítjuk DB-ből
+	bot.SendRaw(fmt.Sprintf("TOPIC %s :%s", channel, savedTopic))
 }

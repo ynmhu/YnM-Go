@@ -140,9 +140,9 @@ func (p *YnmAdminPlugin) sendChannelsWithPrefixes(target string) {
         prefix := p.getBotPrefixInChannel(ch, botNick)
         
         if prefix != "" {
-            channelList = append(channelList, fmt.Sprintf("%s(%s)", ch, prefix))
+            channelList = append(channelList, fmt.Sprintf("%s (%s)", ch, prefix))
         } else {
-            channelList = append(channelList, fmt.Sprintf("%s(-)", ch))
+            channelList = append(channelList, fmt.Sprintf("%s (-)", ch))
         }
     }
 
