@@ -235,6 +235,7 @@ type Client struct {
 	disconnectChan  chan struct{}
 	reconnecting    bool
 	loggedIn        bool
+	manualDisconnect bool 
 	//Undernet 
 	undernetLoginSent bool
     undernetLoggedIn  bool

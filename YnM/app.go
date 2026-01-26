@@ -251,7 +251,7 @@ func (a *App) setupGracefulShutdown() {
 		a.pluginManager.Shutdown()
 		
 		// Bot leállítása
-		a.bot.Disconnect()
+		a.bot.Disconnect(false)
 		os.Exit(0)
 	}()
 }
@@ -266,10 +266,7 @@ func (a *App) Run() error {
     if err := a.bot.Connect(); err != nil {
         return err
     }
-    defer a.bot.Disconnect()
-
-    // ⚠️ ELTÁVOLÍTVA: Ne hívjuk meg itt a joinSavedChannels()-t
-    // Az OnLoginSuccess callback fogja meghívni, amikor az azonosítás sikeres
+    defer a.bot.Disconnect(false)
     
     // Graceful shutdown beállítása
     a.setupGracefulShutdown()

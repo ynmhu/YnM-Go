@@ -152,7 +152,7 @@ func checkGlobalFlood(c *Client, nick string) bool {
 // ─────────────────────── Main Read Loop ─────────────────────────
 
 func (c *Client) readLoop() {
-    defer func() { c.Disconnect() }()
+    defer func() { c.Disconnect(true) }()
 
     reader := bufio.NewReader(c.conn)
 

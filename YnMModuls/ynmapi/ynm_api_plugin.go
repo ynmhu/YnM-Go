@@ -49,12 +49,15 @@ type YnMApiPlugin struct {
     dbMutex     sync.RWMutex
     startTime   time.Time
     config      *YnMConfig.YnMApiConfig
+	cfg         *YnMConfig.Config
     configMutex sync.RWMutex
 	statusQuit       chan struct{}
     startedAt        time.Time
     Version          string
     GoVersion        string
     repository       string
+	reconnectMu  sync.Mutex
+	reconnecting bool
 }
 // Channel struktúra a channels táblához
 type Channel struct {
@@ -213,7 +216,7 @@ type UserProfileUpdate struct {
     AvatarURL  *string    `json:"avatar_url,omitempty"`
 }
 
-func NewYnMApiPlugin(client *YnMIrC.Client, adminPlugin *owner.YnmAdminPlugin) *YnMApiPlugin {
+func NewYnMApiPlugin(client *YnMIrC.Client, cfg *YnMConfig.Config, adminPlugin *owner.YnmAdminPlugin) *YnMApiPlugin {
 
     YnMApiCfg, err := YnMConfig.LoadYnMApiConfig("YnMConfig/ynm-api.yaml")
     if err != nil {
@@ -246,6 +249,7 @@ func NewYnMApiPlugin(client *YnMIrC.Client, adminPlugin *owner.YnmAdminPlugin) *
         dbReady:     false,
         startTime:   time.Now(),
         config:      YnMApiCfg,
+		cfg:              cfg,
 		statusQuit:  make(chan struct{}),
         startedAt:   time.Now(),
         Version:		owner.YnMVersion,

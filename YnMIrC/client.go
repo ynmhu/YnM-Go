@@ -42,6 +42,7 @@ func NewClient(cfg *YnMConfig.Config) *Client {
 		whoBotPrefix:   make(map[string]string),
 		//messageDelay:   time.Duration(client.messageDelay) * time.Millisecond,
 		messageDelay:  1 * time.Second,
+		
 	}
 	
 	
@@ -252,79 +253,61 @@ func (c *Client) Connect() error {
     if c.OnConnect != nil {
         c.OnConnect()
     }
-
     return nil
 }
 
-func (c *Client) Disconnect() {
-	c.mu.Lock()
-	if c.conn != nil {
-		// Send QUIT message before closing
-		c.conn.Write([]byte("QUIT :Client disconnecting\r\n"))
-		c.conn.Close()
-		c.conn = nil
-	}
-	c.connected = false
-	c.loggedIn = false
-	// Clear channels when disconnecting
-	c.channels = make(map[string]*Channel)
-	c.mu.Unlock()
+func (c *Client) Disconnect(manual bool) {
+    c.mu.Lock()
+    c.manualDisconnect = manual
 
-	// Signal reconnect loop
-	select {
-	case c.disconnectChan <- struct{}{}:
-	default:
-	}
+    if c.conn != nil {
+        c.conn.Write([]byte("QUIT :Client disconnecting\r\n"))
+        c.conn.Close()
+        c.conn = nil
+    }
+    c.connected = false
+    c.loggedIn = false
+    c.channels = make(map[string]*Channel)
+    c.mu.Unlock()
+
+    // csak akkor jelezzük az auto reconnectet, ha nem manuális
+    if !manual {
+        select {
+        case c.disconnectChan <- struct{}{}:
+        default:
+        }
+    }
 }
-
 func (c *Client) reconnectLoop() {
-	for range c.disconnectChan {
-		c.mu.Lock()
-		if c.reconnecting {
-			c.mu.Unlock()
-			continue
-		}
-		c.reconnecting = true
-		c.mu.Unlock()
+    for range c.disconnectChan {
+        c.mu.Lock()
+        if c.manualDisconnect {
+            c.manualDisconnect = false
+            c.reconnecting = false
+            c.mu.Unlock()
+            continue
+        }
+        if c.reconnecting {
+            c.mu.Unlock()
+            continue
+        }
+        c.reconnecting = true
+        c.mu.Unlock()
 
-		log.Println("🔄 Újracsatlakozás...")
-		time.Sleep(c.config.ReconnectOnDisconnect)
+        log.Println("🔄 Újracsatlakozás...")
+        time.Sleep(c.config.ReconnectOnDisconnect)
 
-		for {
-			if err := c.Connect(); err == nil {
-				log.Println("✔️ Újracsatlakozás sikeres")
-				
-				// ⚠️ KOMMENTELD KI EZT AZ AUTOJOIN RÉSZT
-				/*
-				// Rejoin channels after reconnect
-				c.mu.RLock()
-				channelsToRejoin := make([]string, 0, len(c.channels))
-				for name := range c.channels {
-					channelsToRejoin = append(channelsToRejoin, name)
-				}
-				c.mu.RUnlock()
-				
-				// Wait a bit for connection to stabilize
-				time.Sleep(2 * time.Second)
-				
-				// Rejoin channels
-				for _, channel := range channelsToRejoin {
-					c.Join(channel)
-					time.Sleep(500 * time.Millisecond)
-				}
-				*/
-			time.Sleep(2 * time.Second)
-			if c.config.ConsoleChannel != "" {
-				c.Join(c.config.ConsoleChannel)
-			}
-				
-				break
-			} else {
-				fmt.Printf("❌ Újracsatlakozás sikertelen: %v\n", err)
-			}
-			time.Sleep(c.config.ReconnectOnDisconnect)
-		}
-	}
+        for {
+            if err := c.Connect(); err == nil {
+                log.Println("✔️ Újracsatlakozás sikeres")
+                c.mu.Lock()
+                c.reconnecting = false
+                c.mu.Unlock()
+                break
+            }
+            time.Sleep(c.config.ReconnectOnDisconnect)
+        }
+    }
 }
 // ─────────────────────── Message Sending ─────────────────────────
 
@@ -705,7 +688,7 @@ func (c *Client) SendRawSilent(message string) error {
 	return err
 }
 func (c *Client) Close() {
-	c.Disconnect()
+	c.Disconnect(true)
 	close(c.sendDone)
 	close(c.sendQueue)
 }

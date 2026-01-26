@@ -19,8 +19,8 @@ import (
     "net/http"
 	"runtime"
     "strings"
-
     "time"
+	
 
 
     _ "github.com/mattn/go-sqlite3"
@@ -66,32 +66,28 @@ func (p *YnMApiPlugin) handleBotControl(w http.ResponseWriter, r *http.Request) 
         })
         
         // Késleltetett restart
-        go func() {
-            time.Sleep(1 * time.Second)
-            fmt.Println("[YnMApI] Bot restart requested by", username)
-            
-            // IRC disconnect
+		go func() {
+			time.Sleep(1 * time.Second)
+
+			p.consoleMsg(fmt.Sprintf("🔄 WEB: restart requested by %s", username))
+
 			if p.client != nil && p.client.IsConnected() {
 				p.client.SendRaw("QUIT :Restarting...")
-				p.client.Disconnect()
+				p.client.Disconnect(false)
 			}
 
-            
-            // Adatbázis bezárása
-            if p.db != nil {
-                p.db.Close()
-            }
-            
-            time.Sleep(1 * time.Second)
-            os.Exit(0) // Systemd vagy PM2 újraindítja
-        }()
+			if p.db != nil {
+				p.db.Close()
+			}
+
+			time.Sleep(1 * time.Second)
+			os.Exit(0)
+		}()
         
 		
 	 case "reload":  // ← IDE TEDD BE!
         p.logAudit(username, "♻️ BOT_RELOAD", r.RemoteAddr, "Configuration reload initiated")
-        
-        // Itt implementálhatod a config újratöltést
-        // Például: pluginok újratöltése, beállítások frissítése
+        p.consoleMsg(fmt.Sprintf("♻️ WEB: reload requested by %s", username))
         
         w.Header().Set("Content-Type", "application/json")
         json.NewEncoder(w).Encode(map[string]interface{}{
@@ -126,30 +122,28 @@ func (p *YnMApiPlugin) handleBotControl(w http.ResponseWriter, r *http.Request) 
             "data":    status,
         })
         
-    case "reconnect":
-        if p.client != nil {
-            p.logAudit(username, "🔌 IRC_RECONNECT", r.RemoteAddr, "IRC reconnect initiated")
-            
-            go func() {
+		case "reconnect":
+			if p.client == nil {
+				http.Error(w, "IRC client not available", http.StatusServiceUnavailable)
+				return
+			}
+
+			p.logAudit(username, "🔌 IRC_RECONNECT", r.RemoteAddr, "IRC reconnect initiated")
+			p.consoleMsg(fmt.Sprintf("🔌 WEB: IRC reconnect requested by %s", username))
+			go func() {
 				if p.client.IsConnected() {
 					p.client.SendRaw("QUIT :Reconnecting...")
-					p.client.Disconnect()
-					time.Sleep(2 * time.Second)
 				}
+				// csak bontunk, a Client.reconnectLoop() csatlakozik vissza
+				p.client.Disconnect(false)
+			}()
 
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": true,
+				"message": "IRC reconnect scheduled...",
+			})
 
-                // IRC reconnect logika
-                p.client.Connect()
-            }()
-            
-            w.Header().Set("Content-Type", "application/json")
-            json.NewEncoder(w).Encode(map[string]interface{}{
-                "success": true,
-                "message": "IRC reconnecting...",
-            })
-        } else {
-            http.Error(w, "IRC client not available", http.StatusServiceUnavailable)
-        }
         
     default:
         http.Error(w, "Unknown command", http.StatusBadRequest)
@@ -314,5 +308,18 @@ func (p *YnMApiPlugin) handleIRCPart(w http.ResponseWriter, r *http.Request) {
         "parted":  true,
     })
 }
+func (p *YnMApiPlugin) consoleMsg(msg string) {
+	if p.client == nil || !p.client.IsConnected() {
+		return
+	}
+	if p.cfg == nil {
+		return
+	}
 
+	ch := strings.TrimSpace(p.cfg.ConsoleChannel)
+	if ch == "" {
+		return
+	}
 
+	p.client.SendMessage(ch, msg)
+}
