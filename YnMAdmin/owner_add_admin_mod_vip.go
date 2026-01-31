@@ -21,8 +21,7 @@ import (
 	"git.ynm.hu/markus/YnM-Go/YnMIrC"
 )
 func (p *YnmAdminPlugin) isOwnerOrBotNick(nick string) bool {
-	return strings.EqualFold(nick, "YnM-Go") || 
-	       strings.EqualFold(nick, p.Bot.GetNick())
+    return strings.EqualFold(nick, p.Bot.GetNick())
 }
 
 func (p *YnmAdminPlugin) isOwnerOrBotByHostmask(hostmask string) bool {
@@ -149,8 +148,8 @@ func (p *YnmAdminPlugin) handleAddAdminCommand(fullHostmask string, userArgs []s
                     targetHostmask = fmt.Sprintf("%s!%s@%s", whois.Nick, whois.Username, whois.Hostname)
                 }
                 targetHostmask = YnMModule.SimplifyHostmask(targetHostmask)
-				p.Bot.SendMessage(issuingChannel, "DEBUG whois.Hostmask: "+whois.Hostmask)
-p.Bot.SendMessage(issuingChannel, "DEBUG simplified hostmask: "+targetHostmask)
+			//	p.Bot.SendMessage(issuingChannel, "DEBUG whois.Hostmask: "+whois.Hostmask)
+			//	p.Bot.SendMessage(issuingChannel, "DEBUG simplified hostmask: "+targetHostmask)
 
                 // ✅ 2. HOSTMASK ALAPÚ VÉDELEM
                 if p.isOwnerOrBotByHostmask(targetHostmask) {

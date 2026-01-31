@@ -70,7 +70,6 @@ func NewTopicUpdaterPlugin(bot *YnMIrC.Client, cfg *YnMConfig.Config, adminPlugi
     }
 }
 // Initialize - Csatlakozáskor indítjuk
-// Initialize - Csatlakozáskor indítjuk
 func (p *TopicUpdaterPlugin) Initialize() {
     go func() {
         time.Sleep(10 * time.Second)
@@ -117,7 +116,7 @@ func (p *TopicUpdaterPlugin) updateTopicInDatabase(channel string, topic string)
         if err != nil {
             return fmt.Errorf("error updating topic in database: %v", err)
         }
-        fmt.Printf("[TopicUpdater] Topic updated in database for channel: %s\n", channel)
+     //   fmt.Printf("[TopicUpdater] Topic updated in database for channel: %s\n", channel)
     } else {
         // Új bejegyzés, ha nem létezik
         // GetIdent és GetHost helyett fix értékek
@@ -173,13 +172,13 @@ func (p *TopicUpdaterPlugin) updateChannelTopic(channel string) {
     // 2. Mentés az adatbázisba
     err := p.updateTopicInDatabase(channel, topic)
     if err != nil {
-        fmt.Printf("[TopicUpdater] Database update failed for %s: %v\n", channel, err)
+      //  fmt.Printf("[TopicUpdater] Database update failed for %s: %v\n", channel, err)
         // Visszaadjuk az eredményt a console channel-be (opció)
         if channel == p.cfg.ConsoleChannel {
             p.bot.SendRaw(fmt.Sprintf("PRIVMSG %s :Database update failed: %v", channel, err))
         }
     } else {
-        fmt.Printf("[TopicUpdater] Topic saved to database for channel: %s\n", channel)
+   //     fmt.Printf("[TopicUpdater] Topic saved to database for channel: %s\n", channel)
     }
     
     p.mutex.Lock()

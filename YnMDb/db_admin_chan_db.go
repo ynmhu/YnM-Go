@@ -65,11 +65,14 @@ func (a *AdminDB) AddChannel(name, owner, hostmask, addedByHost string) error {
     }
     defer tx.Rollback() // Biztonság
     
+    channelName := strings.ToLower(name)
+    
+    // 2. Beszúrás a channels táblába
     result, err := tx.Exec(`
         INSERT INTO channels 
         (name, owner, owner_hostmask, auto_op, auto_voice, auto_halfop, created_at) 
         VALUES (?, ?, ?, 0, 0, 0, datetime('now'))
-    `, strings.ToLower(name), owner, hostmask)
+    `, channelName, owner, hostmask)
     if err != nil {
         return err
     }
@@ -79,41 +82,80 @@ func (a *AdminDB) AddChannel(name, owner, hostmask, addedByHost string) error {
         return err
     }
 
+    // 3. Beszúrás a channel_users táblába
     _, err = tx.Exec(`
         INSERT INTO channel_users 
         (nick, hostmask, channel, role, auto_op, auto_voice, auto_halfop, added_by, added_by_host, created_at)
         VALUES (?, ?, ?, 'owner', 1, 0, 0, 'YnM-Go', ?, datetime('now'))
-    `, owner, hostmask, strings.ToLower(name), addedByHost)
+    `, owner, hostmask, channelName, addedByHost)
+    if err != nil {
+        return err
+    }
+    
+    // 4. Beszúrás a channels_modes táblába - alap +nt módokkal
+    _, err = tx.Exec(`
+        INSERT INTO channel_modes 
+        (channel, modes, mode, mode_params, enabled, set_by, set_by_host, created_at, updated_at, active)
+        VALUES (?, '+nt', '', ?, 1, ?, ?, datetime('now'), datetime('now'), 1)
+    `, channelName, "{}", owner, hostmask)  // JSON stringként a {}
+    if err != nil {
+        return err
+    }
+    
+    // 5. Beszúrás a channel_bans táblába - üres induláshoz
+    // (ha nem akarsz kezdő bant, akkor ezt az INSERT-et kihagyhatod)
+    _, err = tx.Exec(`
+        INSERT INTO channel_bans 
+        (channel, mask, set_by, set_by_host, reason, created_at, expires_at, active)
+        VALUES (?, '', ?, ?, 'Initial empty ban record', datetime('now'), NULL, 0)
+    `, channelName, owner, hostmask)
+    if err != nil {
+        return err
+    }
+    
+    // 6. Tranzakció véglegesítése
+    return tx.Commit()
+}
+
+func (a *AdminDB) RemoveChannel(channel string) error {
+    tx, err := a.db.Begin()
+    if err != nil {
+        return err
+    }
+    
+    // Minden esetben próbáljuk meg végrehajtani a rollback-et
+    defer func() {
+        if err != nil {
+            tx.Rollback()
+        }
+    }()
+    
+    // 1. Törlés channel_bans táblából
+    _, err = tx.Exec("DELETE FROM channel_bans WHERE LOWER(channel) = LOWER(?)", channel)
+    if err != nil {
+        return err
+    }
+    
+    // 2. Törlés channel_modes táblából (itt volt a hiba: channels_modes helyett channel_modes)
+    _, err = tx.Exec("DELETE FROM channel_modes WHERE LOWER(channel) = LOWER(?)", channel)
+    if err != nil {
+        return err
+    }
+    
+    // 3. Törlés channel_users táblából
+    _, err = tx.Exec("DELETE FROM channel_users WHERE LOWER(channel) = LOWER(?)", channel)
+    if err != nil {
+        return err
+    }
+    
+    // 4. Törlés channels táblából (utoljára, mert ez a fő rekord)
+    _, err = tx.Exec("DELETE FROM channels WHERE LOWER(name) = LOWER(?)", channel)
     if err != nil {
         return err
     }
     
     // 5. Tranzakció véglegesítése
     return tx.Commit()
-}
-
-func (a *AdminDB) RemoveChannel(channel string) error {
-	tx, err := a.db.Begin()
-	if err != nil {
-		return err
-	}
-	_, err = tx.Exec("DELETE FROM channels WHERE LOWER(name) = LOWER(?)", channel)
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-	_, err = tx.Exec("DELETE FROM channel_users WHERE LOWER(channel) = LOWER(?)", channel)
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	_, err = tx.Exec("DELETE FROM channel_modes WHERE LOWER(channel) = LOWER(?)", channel)
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-	return tx.Commit()
 }
 
 func (a *AdminDB) GetAllChannels() ([]string, error) {

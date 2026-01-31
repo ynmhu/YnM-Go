@@ -719,7 +719,7 @@ if cfg.Plugins.EnableWebhook {
 			time.Sleep(5 * time.Second)
 			
 			// Import már megtörtént, használjuk:
-			ynmapIPlugin := ynmapi.NewYnMApiPlugin(bot, cfg, ynmAdminPlugin, )  // <- "ynmapi." prefix!
+			ynmapIPlugin := ynmapi.NewYnMApiPlugin(bot, cfg, ynmAdminPlugin, )  
 			
 			// Config reload callback beállítása
 			ynmapIPlugin.SetConfigReloadCallback(func() error {
