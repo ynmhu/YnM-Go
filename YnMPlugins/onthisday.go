@@ -111,22 +111,22 @@ func translateToHungarian(text string) string {
 
 	body, err := httpGetOTD(apiURL)
 	if err != nil {
-		log.Printf("⚠️ [OnThisDay] Fordítás HTTP hiba: %v – eredeti szöveg marad", err)
+		//log.Printf("⚠️ [OnThisDay] Fordítás HTTP hiba: %v – eredeti szöveg marad", err)
 		return text
 	}
 
 	var resp MyMemoryResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
-		log.Printf("⚠️ [OnThisDay] Fordítás parse hiba: %v – eredeti szöveg marad", err)
+		//log.Printf("⚠️ [OnThisDay] Fordítás parse hiba: %v – eredeti szöveg marad", err)
 		return text
 	}
 
 	if resp.ResponseStatus != 200 || resp.ResponseData.TranslatedText == "" {
-		log.Printf("⚠️ [OnThisDay] Fordítás sikertelen (status: %d) – eredeti szöveg marad", resp.ResponseStatus)
+		//log.Printf("⚠️ [OnThisDay] Fordítás sikertelen (status: %d) – eredeti szöveg marad", resp.ResponseStatus)
 		return text
 	}
 
-	log.Printf("🌐 [OnThisDay] Fordítás kész: %q → %q", text, resp.ResponseData.TranslatedText)
+	//log.Printf("🌐 [OnThisDay] Fordítás kész: %q → %q", text, resp.ResponseData.TranslatedText)
 	return sanitizeForIRC(resp.ResponseData.TranslatedText)
 }
 
@@ -164,9 +164,9 @@ func NewOnThisDayPlugin(bot *YnMIrC.Client, cfg struct {
 		postTime = "08:00"
 	}
 
-	log.Printf("🔧 [OnThisDay] Init – postTime: %q", postTime)
-	log.Printf("🔧 [OnThisDay] IRC csatornák: %v", ircChannels)
-	log.Printf("🔧 [OnThisDay] Discord csatornák: %v", discordChannels)
+	//log.Printf("🔧 [OnThisDay] Init – postTime: %q", postTime)
+	//log.Printf("🔧 [OnThisDay] IRC csatornák: %v", ircChannels)
+	//log.Printf("🔧 [OnThisDay] Discord csatornák: %v", discordChannels)
 
 	return &OnThisDayPlugin{
 		bot:             bot,
@@ -194,7 +194,7 @@ func isDiscordChannelOTD(channel string) bool {
 
 func (p *OnThisDayPlugin) Start() {
 	p.ticker = time.NewTicker(1 * time.Minute)
-	log.Printf("📅 [OnThisDay] Plugin elindult. Küldési idő: %q", p.postTime)
+//	log.Printf("📅 [OnThisDay] Plugin elindult. Küldési idő: %q", p.postTime)
 
 	go func() {
 		for {
@@ -203,7 +203,7 @@ func (p *OnThisDayPlugin) Start() {
 				p.checkAndPost()
 			case <-p.stopChan:
 				p.ticker.Stop()
-				log.Printf("📅 [OnThisDay] Stop() – ticker leállt.")
+	//			log.Printf("📅 [OnThisDay] Stop() – ticker leállt.")
 				return
 			}
 		}
@@ -228,7 +228,7 @@ func (p *OnThisDayPlugin) checkAndPost() {
 		return
 	}
 
-	log.Printf("✅ [OnThisDay] Idő egyezik (%s), küldés indul...", currentTime)
+	//log.Printf("✅ [OnThisDay] Idő egyezik (%s), küldés indul...", currentTime)
 	p.lastPostedDate = today
 	p.postDailyMessage(now)
 }
@@ -236,7 +236,7 @@ func (p *OnThisDayPlugin) checkAndPost() {
 func (p *OnThisDayPlugin) postDailyMessage(t time.Time) {
 	month := int(t.Month())
 	day := t.Day()
-	log.Printf("📅 [OnThisDay] postDailyMessage – %04d-%02d-%02d", t.Year(), month, day)
+	//log.Printf("📅 [OnThisDay] postDailyMessage – %04d-%02d-%02d", t.Year(), month, day)
 
 	lines := []string{}
 
@@ -263,7 +263,7 @@ func (p *OnThisDayPlugin) postDailyMessage(t time.Time) {
 		p.sendToAllChannels(line)
 	}
 
-	log.Printf("✅ [OnThisDay] Küldés kész (%d sor).", len(lines))
+	//log.Printf("✅ [OnThisDay] Küldés kész (%d sor).", len(lines))
 }
 
 // ─── Ünnep lekérés ─────────────────────────────────────────────────────────
@@ -273,10 +273,10 @@ func fetchHoliday(month, day int) string {
 		"https://en.wikipedia.org/api/rest_v1/feed/onthisday/holidays/%02d/%02d",
 		month, day,
 	)
-	log.Printf("🌐 [OnThisDay] GET: %s", apiURL)
+	//log.Printf("🌐 [OnThisDay] GET: %s", apiURL)
 	body, err := httpGetOTD(apiURL)
 	if err != nil {
-		log.Printf("❌ [OnThisDay] Ünnep HTTP hiba: %v", err)
+		//log.Printf("❌ [OnThisDay] Ünnep HTTP hiba: %v", err)
 		return ""
 	}
 
@@ -284,12 +284,12 @@ func fetchHoliday(month, day int) string {
 		Holidays []WikiOnThisDay `json:"holidays"`
 	}
 	if err := json.Unmarshal(body, &resp); err != nil || len(resp.Holidays) == 0 {
-		log.Printf("⚠️ [OnThisDay] Ünnep: nincs adat vagy parse hiba")
+		//log.Printf("⚠️ [OnThisDay] Ünnep: nincs adat vagy parse hiba")
 		return ""
 	}
 
 	h := resp.Holidays[0]
-	log.Printf("🌍 [OnThisDay] Ünnep fordítás előtt: %q", h.Text)
+	//log.Printf("🌍 [OnThisDay] Ünnep fordítás előtt: %q", h.Text)
 	translated := translateToHungarian(h.Text)
 	return fmt.Sprintf("🌍 \x02Nemzetközi nap:\x02 %s", translated)
 }
@@ -302,25 +302,25 @@ func fetchHistoricalEvent(month, day int) string {
 		"https://en.wikipedia.org/api/rest_v1/feed/onthisday/selected/%02d/%02d",
 		month, day,
 	)
-	log.Printf("🌐 [OnThisDay] GET (selected): %s", apiURL)
+	//log.Printf("🌐 [OnThisDay] GET (selected): %s", apiURL)
 	body, err := httpGetOTD(apiURL)
 	if err != nil {
-		log.Printf("⚠️ [OnThisDay] selected hiba: %v – events fallback...", err)
+		//log.Printf("⚠️ [OnThisDay] selected hiba: %v – events fallback...", err)
 		apiURL = fmt.Sprintf(
 			"https://en.wikipedia.org/api/rest_v1/feed/onthisday/events/%02d/%02d",
 			month, day,
 		)
-		log.Printf("🌐 [OnThisDay] GET (events): %s", apiURL)
+		//log.Printf("🌐 [OnThisDay] GET (events): %s", apiURL)
 		body, err = httpGetOTD(apiURL)
 		if err != nil {
-			log.Printf("❌ [OnThisDay] events fallback is hiba: %v", err)
+			//log.Printf("❌ [OnThisDay] events fallback is hiba: %v", err)
 			return ""
 		}
 	}
 
 	var resp WikiOnThisDayResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
-		log.Printf("❌ [OnThisDay] Esemény JSON parse hiba: %v", err)
+		//log.Printf("❌ [OnThisDay] Esemény JSON parse hiba: %v", err)
 		return ""
 	}
 
@@ -329,7 +329,7 @@ func fetchHistoricalEvent(month, day int) string {
 		events = resp.Events
 	}
 	if len(events) == 0 {
-		log.Printf("⚠️ [OnThisDay] Nincs egyetlen esemény sem!")
+		//log.Printf("⚠️ [OnThisDay] Nincs egyetlen esemény sem!")
 		return ""
 	}
 
@@ -339,7 +339,7 @@ func fetchHistoricalEvent(month, day int) string {
 		pool = pool[:5]
 	}
 	e := pool[rand.Intn(len(pool))]
-	log.Printf("📖 [OnThisDay] Esemény fordítás előtt: %d – %q", e.Year, e.Text)
+	//log.Printf("📖 [OnThisDay] Esemény fordítás előtt: %d – %q", e.Year, e.Text)
 
 	translated := translateToHungarian(e.Text)
 
@@ -367,7 +367,7 @@ func httpGetOTD(rawURL string) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 
-	log.Printf("🌐 [OnThisDay] HTTP %d ← %s", resp.StatusCode, rawURL)
+	//log.Printf("🌐 [OnThisDay] HTTP %d ← %s", resp.StatusCode, rawURL)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
@@ -379,14 +379,14 @@ func httpGetOTD(rawURL string) ([]byte, error) {
 
 func (p *OnThisDayPlugin) sendToAllChannels(message string) {
 	for _, ch := range p.channels {
-		log.Printf("📡 [OnThisDay] IRC → %s", ch)
+		//log.Printf("📡 [OnThisDay] IRC → %s", ch)
 		p.bot.SendMessage(ch, message)
 	}
 	if p.discord != nil {
 		for _, ch := range p.discordChannels {
-			log.Printf("🎮 [OnThisDay] Discord → %s", ch)
+			//log.Printf("🎮 [OnThisDay] Discord → %s", ch)
 			if err := p.discord.SendMessage(ch, message); err != nil {
-				log.Printf("❌ [OnThisDay] Discord hiba (%s): %v", ch, err)
+				//log.Printf("❌ [OnThisDay] Discord hiba (%s): %v", ch, err)
 			}
 		}
 	}
@@ -407,7 +407,7 @@ func magyarDatum(t time.Time) string {
 func (p *OnThisDayPlugin) HandleMessage(msg YnMIrC.Message) string {
 	switch strings.TrimSpace(msg.Text) {
 	case "!ma", "!onthisday":
-		log.Printf("💬 [OnThisDay] Manuális parancs: %q", msg.Text)
+		//log.Printf("💬 [OnThisDay] Manuális parancs: %q", msg.Text)
 		// Csak abba a csatornába küldjük vissza ahol a parancs érkezett
 		go p.postToChannel(time.Now(), msg.Channel)
 		return ""
