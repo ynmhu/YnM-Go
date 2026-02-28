@@ -136,6 +136,7 @@ func (pm *PluginManager) UpdatePluginStatesInDB(cfg *YnMConfig.Config, channels 
 	pluginStates := map[string]bool{
 		"ping":            cfg.Plugins.EnablePing,
 		"nameday":         cfg.Plugins.EnableNameDay,
+		"onthisday": 	 cfg.Plugins.EnableOnthisDay,
 		"ora":             cfg.Plugins.EnableOra,
 		"huntorrent":      cfg.Plugins.EnableHuntorrent,
 		"horoscope":       cfg.Plugins.EnableHoroscope,
@@ -558,6 +559,17 @@ func (pm *PluginManager) RegisterAll(bot *YnMIrC.Client, cfg *YnMConfig.Config) 
 		}
 	}
 		
+				//		OnthisDay	 
+	if cfg.Plugins.EnableOnthisDay {
+		onThisDayPlugin, err := ynm.NewOnThisDayPlugin(bot, cfg.OnThisDayPlugin, discordAdapter)
+		if err != nil {
+			log.Printf("⚠️ OnThisDay plugin betöltési hiba: %v (kikapcsolva)", err)
+		} else {
+			onThisDayPlugin.Start()
+			pm.manager.Register(onThisDayPlugin)
+			//log.Printf("✅ OnThisDay plugin regisztrálva (Discord támogatással: %v)", discordAdapter != nil)
+		}
+	}
 	//		Horoszkóp plugin
 	if cfg.Plugins.EnableHoroscope {
 		 horoszkopPlugin := ynm.NewHoroszkopPlugin(bot)

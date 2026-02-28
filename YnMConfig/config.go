@@ -114,6 +114,8 @@ type Config struct {
 	
 	//GIT plugin
 	GitPlugin GitPluginConfig `yaml:"GitPlugin"`
+	//OnThisDay plugin
+	OnThisDayPlugin OnThisDayPluginConfig `yaml:"OnThisDayPlugin"`
 	 // Update notification settings
     UpdateCheck struct {
         Enabled         bool          `yaml:"enabled"`
@@ -213,6 +215,7 @@ type PluginConfig struct {
 
 	// YnM plugins (existing)
 	EnableGit      bool `yaml:"enable_git"`
+	EnableOnthisDay  bool `yaml:"enableOnthisDay"`
 	EnableImdb     bool `yaml:"enable_imdb"`
 	EnableMail     bool `yaml:"enable_mail"`
 	EnableXes0     bool `yaml:"enable_xes0"`
@@ -482,6 +485,10 @@ type GitPluginConfig struct {
     ApiURL  string   `yaml:"apiURL"`
 }
 
+type OnThisDayPluginConfig struct {
+    Channel  []string `yaml:"channel"`
+    PostTime string   `yaml:"postTime"`
+}
 
 type UndernetConfig struct {
     Enabled  bool   `yaml:"Enabled"`
