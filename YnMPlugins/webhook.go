@@ -240,7 +240,7 @@ case "Notify":
     }
     
     //log.Printf("[WebhookPlugin] 🐻 Kuma üzenet: %s", msg)
-	ircMessage = fmt.Sprintf("[🤖] 📊 %s - https://status.ynm.hu", msg)
+	ircMessage = fmt.Sprintf("[🤖] 📊 %s - https://up.ynm.hu", msg)
     sendToAll(ircMessage)
 	
 	

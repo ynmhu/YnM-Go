@@ -195,7 +195,7 @@ func writeLastSeen(path, sha string) {
 }
 
 func (p *GitPlugin) Start() {
-	p.ticker = time.NewTicker(1 * time.Minute)
+	p.ticker = time.NewTicker(30 * time.Minute)
 
 	//log.Printf("🔧 Git plugin elindult. API: %s", p.apiURL)
 	if len(p.channels) > 0 {

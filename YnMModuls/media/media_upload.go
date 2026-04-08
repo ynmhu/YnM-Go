@@ -18,8 +18,8 @@ import (
 	"log"
 	"os"
 	"strings"
-	"time"
 	"sync"
+	"time"
 
 	"git.ynm.hu/markus/YnM-Go/YnMConfig"
 	"git.ynm.hu/markus/YnM-Go/YnMIrC"
@@ -43,352 +43,107 @@ type pendingMedia struct {
 	item      *MediaItem
 	timestamp time.Time
 }
+
+// maxSentPaths caps the in-memory + persisted sent-path list
+const maxSentPaths = 2000
+
+// suffixLabels maps path suffixes to display labels
+var suffixLabels = map[string]string{
+	"f":      "🎞️  Filmek 2023 után",
+	"r":      "🎬 2023 előtti filmek",
+	"Series": "📺 Sorozatok",
+	"k":      "📜 Kérve",
+	"c":      "🍿 Moziváltozat",
+	"n":      "🧸 Rajzfilmek",
+	"e":      "🐰 Rajzfilm Évadok",
+	"m":      "🎞️ Filmek Hu 🇭🇺",
+	"o":      "🎞️ Filmek Ro 🇷🇴",
+	"d":      "🌍 Dokumentumfilmek",
+	"h":      "✅ Hangoskönyvek 🎧 📰",
+	"app":    "✅ Android App 🤖",
+	"mp3":    "🎵 Mp3",
+	"i":      "📝 Feliratos Filmek",
+	"km":     "✅ KabareHu 🎧 🎭",
+	"u":      "✅ KabareRo 🎧 🎭",
+	"tv":     "📺 TV-műsorok",
+}
+
 var (
-	customMessages = map[string]string{
-        "/media/F1/f":      "🎞️  Filmek 2023 után",
-        "/media/F2/f":      "🎞️  Filmek 2023 után",
-        "/media/F3/f":      "🎞️  Filmek 2023 után",
-        "/media/F4/f":      "🎞️  Filmek 2023 után",
-        "/media/F5/f":      "🎞️  Filmek 2023 után",
-        "/media/F6/f":      "🎞️  Filmek 2023 után",
-        "/media/F7/f":      "🎞️  Filmek 2023 után",
-        "/media/F8/f":      "🎞️  Filmek 2023 után",
-        "/media/F9/f":      "🎞️  Filmek 2023 után",
-        "/media/F10/f":     "🎞️  Filmek 2023 után",
-        "/media/F11/f":     "🎞️  Filmek 2023 után",
-        "/media/F12/f":     "🎞️  Filmek 2023 után",
-        "/media/F13/f":     "🎞️  Filmek 2023 után",
-        "/media/F14/f":     "🎞️  Filmek 2023 után",
-        "/media/F15/f":     "🎞️  Filmek 2023 után",
-
-        "/media/F1/r":      "🎬 2023 előtti filmek",
-        "/media/F2/r":      "🎬 2023 előtti filmek",
-        "/media/F3/r":      "🎬 2023 előtti filmek",
-        "/media/F4/r":      "🎬 2023 előtti filmek",
-        "/media/F5/r":      "🎬 2023 előtti filmek",
-        "/media/F6/r":      "🎬 2023 előtti filmek",
-        "/media/F7/r":      "🎬 2023 előtti filmek",
-        "/media/F8/r":      "🎬 2023 előtti filmek",
-        "/media/F9/r":      "🎬 2023 előtti filmek",
-        "/media/F10/r":     "🎬 2023 előtti filmek",
-        "/media/F11/r":     "🎬 2023 előtti filmek",
-        "/media/F12/r":     "🎬 2023 előtti filmek",
-        "/media/F13/r":     "🎬 2023 előtti filmek",
-        "/media/F14/r":     "🎬 2023 előtti filmek",
-        "/media/F15/r":     "🎬 2023 előtti filmek",
-
-        "/media/F1/Series": "📺 Sorozatok",
-        "/media/F2/Series": "📺 Sorozatok",
-        "/media/F3/Series": "📺 Sorozatok",
-        "/media/F4/Series": "📺 Sorozatok",
-        "/media/F5/Series": "📺 Sorozatok",
-        "/media/F6/Series": "📺 Sorozatok",
-        "/media/F7/Series": "📺 Sorozatok",
-        "/media/F8/Series": "📺 Sorozatok",
-        "/media/F9/Series": "📺 Sorozatok",
-        "/media/F10/Series":"📺 Sorozatok",
-        "/media/F11/Series":"📺 Sorozatok",
-        "/media/F12/Series":"📺 Sorozatok",
-        "/media/F13/Series":"📺 Sorozatok",
-        "/media/F14/Series":"📺 Sorozatok",
-        "/media/F15/Series":"📺 Sorozatok",
-		"/media/x/Series":     "📺 Sorozatok",
-		
-
-        "/media/F1/k":      "📜 Kérve",
-        "/media/F2/k":      "📜 Kérve",
-        "/media/F3/k":      "📜 Kérve",
-        "/media/F4/k":      "📜 Kérve",
-        "/media/F5/k":      "📜 Kérve",
-        "/media/F6/k":      "📜 Kérve",
-        "/media/F7/k":      "📜 Kérve",
-        "/media/F8/k":      "📜 Kérve",
-        "/media/F9/k":      "📜 Kérve",
-        "/media/F10/k":     "📜 Kérve",
-        "/media/F11/k":     "📜 Kérve",
-        "/media/F12/k":     "📜 Kérve",
-        "/media/F13/k":     "📜 Kérve",
-        "/media/F14/k":     "📜 Kérve",
-        "/media/F15/k":     "📜 Kérve",
-
-        "/media/F1/c":      "🍿 Moziváltozat",
-        "/media/F2/c":      "🍿 Moziváltozat",
-        "/media/F3/c":      "🍿 Moziváltozat",
-        "/media/F4/c":      "🍿 Moziváltozat",
-        "/media/F5/c":      "🍿 Moziváltozat",
-        "/media/F6/c":      "🍿 Moziváltozat",
-        "/media/F7/c":      "🍿 Moziváltozat",
-        "/media/F8/c":      "🍿 Moziváltozat",
-        "/media/F9/c":      "🍿 Moziváltozat",
-        "/media/F10/c":     "🍿 Moziváltozat",
-        "/media/F11/c":     "🍿 Moziváltozat",
-        "/media/F12/c":     "🍿 Moziváltozat",
-        "/media/F13/c":     "🍿 Moziváltozat",
-        "/media/F14/c":     "🍿 Moziváltozat",
-        "/media/F15/c":     "🍿 Moziváltozat",
-
-        "/media/F1/n":      "🧸 Rajzfilmek",
-        "/media/F2/n":      "🧸 Rajzfilmek",
-        "/media/F3/n":      "🧸 Rajzfilmek",
-        "/media/F4/n":      "🧸 Rajzfilmek",
-        "/media/F5/n":      "🧸 Rajzfilmek",
-        "/media/F6/n":      "🧸 Rajzfilmek",
-        "/media/F7/n":      "🧸 Rajzfilmek",
-        "/media/F8/n":      "🧸 Rajzfilmek",
-        "/media/F9/n":      "🧸 Rajzfilmek",
-        "/media/F10/n":     "🧸 Rajzfilmek",
-        "/media/F11/n":     "🧸 Rajzfilmek",
-        "/media/F12/n":     "🧸 Rajzfilmek",
-        "/media/F13/n":     "🧸 Rajzfilmek",
-        "/media/F14/n":     "🧸 Rajzfilmek",
-        "/media/F15/n":     "🧸 Rajzfilmek",
-		"/media/x/n":     "🧸 Rajzfilmek",
-
-    "/media/F1/e":  "🐰 Rajzfilm Évadok",
-    "/media/F2/e":  "🐰 Rajzfilm Évadok",
-    "/media/F3/e":  "🐰 Rajzfilm Évadok",
-    "/media/F4/e":  "🐰 Rajzfilm Évadok",
-    "/media/F5/e":  "🐰 Rajzfilm Évadok",
-    "/media/F6/e":  "🐰 Rajzfilm Évadok",
-    "/media/F7/e":  "🐰 Rajzfilm Évadok",
-    "/media/F8/e":  "🐰 Rajzfilm Évadok",
-    "/media/F9/e":  "🐰 Rajzfilm Évadok",
-    "/media/F10/e": "🐰 Rajzfilm Évadok",
-    "/media/F11/e": "🐰 Rajzfilm Évadok",
-    "/media/F12/e": "🐰 Rajzfilm Évadok",
-    "/media/F13/e": "🐰 Rajzfilm Évadok",
-    "/media/F14/e": "🐰 Rajzfilm Évadok",
-    "/media/F15/e": "🐰 Rajzfilm Évadok",
-	"/media/x/e":     "🐰 Rajzfilm Évadok",
-
-	"/media/F1/m":  "🎞️ Filmek Hu 🇭🇺",
-    "/media/F2/m":  "🎞️ Filmek Hu 🇭🇺",
-    "/media/F3/m":  "🎞️ Filmek Hu 🇭🇺",
-    "/media/F4/m":  "🎞️ Filmek Hu 🇭🇺",
-    "/media/F5/m":  "🎞️ Filmek Hu 🇭🇺",
-    "/media/F6/m":  "🎞️ Filmek Hu 🇭🇺",
-    "/media/F7/m":  "🎞️ Filmek Hu 🇭🇺",
-    "/media/F8/m":  "🎞️ Filmek Hu 🇭🇺",
-    "/media/F9/m":  "🎞️ Filmek Hu 🇭🇺",
-    "/media/F10/m": "🎞️ Filmek Hu 🇭🇺",
-    "/media/F11/m": "🎞️ Filmek Hu 🇭🇺",
-    "/media/F12/m": "🎞️ Filmek Hu 🇭🇺",
-    "/media/F13/m": "🎞️ Filmek Hu 🇭🇺",
-    "/media/F14/m": "🎞️ Filmek Hu 🇭🇺",
-    "/media/F15/m": "🎞️ Filmek Hu 🇭🇺",
-	
-	
-	
-	"/media/F1/o":  "🎞️ Filmek Ro 🇷🇴",
-    "/media/F2/o":  "🎞️ Filmek Ro 🇷🇴",
-    "/media/F3/o":  "🎞️ Filmek Ro 🇷🇴",
-    "/media/F4/o":  "🎞️ Filmek Ro 🇷🇴",
-    "/media/F5/o":  "🎞️ Filmek Ro 🇷🇴",
-    "/media/F6/o":  "🎞️ Filmek Ro 🇷🇴",
-    "/media/F7/o":  "🎞️ Filmek Ro 🇷🇴",
-    "/media/F8/o":  "🎞️ Filmek Ro 🇷🇴",
-    "/media/F9/o":  "🎞️ Filmek Ro 🇷🇴",
-    "/media/F10/o": "🎞️ Filmek Ro 🇷🇴",
-    "/media/F11/o": "🎞️ Filmek Ro 🇷🇴",
-    "/media/F12/o": "🎞️ Filmek Ro 🇷🇴",
-    "/media/F13/o": "🎞️ Filmek Ro 🇷🇴",
-    "/media/F14/o": "🎞️ Filmek Ro 🇷🇴",
-    "/media/F15/o": "🎞️ Filmek Ro 🇷🇴",
-
-	
-    "/media/F1/d":  "🌍 Dokumentumfilmek",
-    "/media/F2/d":  "🌍 Dokumentumfilmek",
-    "/media/F3/d":  "🌍 Dokumentumfilmek",
-    "/media/F4/d":  "🌍 Dokumentumfilmek",
-    "/media/F5/d":  "🌍 Dokumentumfilmek",
-    "/media/F6/d":  "🌍 Dokumentumfilmek",
-    "/media/F7/d":  "🌍 Dokumentumfilmek",
-    "/media/F8/d":  "🌍 Dokumentumfilmek",
-    "/media/F9/d":  "🌍 Dokumentumfilmek",
-    "/media/F10/d": "🌍 Dokumentumfilmek",
-    "/media/F11/d": "🌍 Dokumentumfilmek",
-    "/media/F12/d": "🌍 Dokumentumfilmek",
-    "/media/F13/d": "🌍 Dokumentumfilmek",
-    "/media/F14/d": "🌍 Dokumentumfilmek",
-    "/media/F15/d": "🌍 Dokumentumfilmek",
-	
-	
-	"/media/F1/h":  "✅ Hangoskönyvek 🎧 📰",
-    "/media/F2/h":  "✅ Hangoskönyvek 🎧 📰",
-    "/media/F3/h":  "✅ Hangoskönyvek 🎧 📰",
-    "/media/F4/h":  "✅ Hangoskönyvek 🎧 📰",
-    "/media/F5/h":  "✅ Hangoskönyvek 🎧 📰",
-    "/media/F6/h":  "✅ Hangoskönyvek 🎧 📰",
-    "/media/F7/h":  "✅ Hangoskönyvek 🎧 📰",
-    "/media/F8/h":  "✅ Hangoskönyvek 🎧 📰",
-    "/media/F9/h":  "✅ Hangoskönyvek 🎧 📰",
-    "/media/F10/h": "✅ Hangoskönyvek 🎧 📰",
-    "/media/F11/h": "✅ Hangoskönyvek 🎧 📰",
-    "/media/F12/h": "✅ Hangoskönyvek 🎧 📰",
-    "/media/F13/h": "✅ Hangoskönyvek 🎧 📰",
-    "/media/F14/h": "✅ Hangoskönyvek 🎧 📰",
-    "/media/F15/h": "✅ Hangoskönyvek 🎧 📰",
-
-        "/media/F1/app":   "✅ Android App 🤖",
-        "/media/F2/app":   "✅ Android App 🤖",
-        "/media/F3/app":   "✅ Android App 🤖",
-        "/media/F4/app":   "✅ Android App 🤖",
-        "/media/F5/app":   "✅ Android App 🤖",
-        "/media/F6/app":   "✅ Android App 🤖",
-        "/media/F7/app":   "✅ Android App 🤖",
-        "/media/F8/app":   "✅ Android App 🤖",
-        "/media/F9/app":   "✅ Android App 🤖",
-        "/media/F10/app":  "✅ Android App 🤖",
-        "/media/F11/app":  "✅ Android App 🤖",
-        "/media/F12/app":  "✅ Android App 🤖",
-        "/media/F13/app":  "✅ Android App 🤖",
-        "/media/F14/app":  "✅ Android App 🤖",
-        "/media/F15/app":  "✅ Android App 🤖",
-
-        "/media/F1/mp3":   "🎵 Mp3",
-        "/media/F2/mp3":   "🎵 Mp3",
-        "/media/F3/mp3":   "🎵 Mp3",
-        "/media/F4/mp3":   "🎵 Mp3",
-        "/media/F5/mp3":   "🎵 Mp3",
-        "/media/F6/mp3":   "🎵 Mp3",
-        "/media/F7/mp3":   "🎵 Mp3",
-        "/media/F8/mp3":   "🎵 Mp3",
-        "/media/F9/mp3":   "🎵 Mp3",
-        "/media/F10/mp3":  "🎵 Mp3",
-        "/media/F11/mp3":  "🎵 Mp3",
-        "/media/F12/mp3":  "🎵 Mp3",
-        "/media/F13/mp3":  "🎵 Mp3",
-        "/media/F14/mp3":  "🎵 Mp3",
-        "/media/F15/mp3":  "🎵 Mp3",
-		
-        "/media/F1/i":     "📝 Feliratos Filmek",
-        "/media/F2/i":     "📝 Feliratos Filmek",
-        "/media/F3/i":     "📝 Feliratos Filmek",
-        "/media/F4/i":     "📝 Feliratos Filmek",
-        "/media/F5/i":     "📝 Feliratos Filmek",
-        "/media/F6/i":     "📝 Feliratos Filmek",
-        "/media/F7/i":     "📝 Feliratos Filmek",
-        "/media/F8/i":     "📝 Feliratos Filmek",
-        "/media/F9/i":     "📝 Feliratos Filmek",
-        "/media/F10/i":    "📝 Feliratos Filmek",
-        "/media/F11/i":    "📝 Feliratos Filmek",
-        "/media/F12/i":    "📝 Feliratos Filmek",
-        "/media/F13/i":    "📝 Feliratos Filmek",
-        "/media/F14/i":    "📝 Feliratos Filmek",
-        "/media/F15/i":    "📝 Feliratos Filmek",		
-		
-       "/media/F1/km":    "✅ KabareHu 🎧 🎭",
-        "/media/F2/km":    "✅ KabareHu 🎧 🎭",
-        "/media/F3/km":    "✅ KabareHu 🎧 🎭",
-        "/media/F4/km":    "✅ KabareHu 🎧 🎭",
-        "/media/F5/km":    "✅ KabareHu 🎧 🎭",
-        "/media/F6/km":    "✅ KabareHu 🎧 🎭",
-        "/media/F7/km":    "✅ KabareHu 🎧 🎭",
-        "/media/F8/km":    "✅ KabareHu 🎧 🎭",
-        "/media/F9/km":    "✅ KabareHu 🎧 🎭",
-        "/media/F10/km":   "✅ KabareHu 🎧 🎭",
-        "/media/F11/km":   "✅ KabareHu 🎧 🎭",
-        "/media/F12/km":   "✅ KabareHu 🎧 🎭",
-        "/media/F13/km":   "✅ KabareHu 🎧 🎭",
-        "/media/F14/km":   "✅ KabareHu 🎧 🎭",
-        "/media/F15/km":   "✅ KabareHu 🎧 🎭",
-
-        "/media/F1/u":     "✅ KabareRo 🎧 🎭",
-        "/media/F2/u":     "✅ KabareRo 🎧 🎭",
-        "/media/F3/u":     "✅ KabareRo 🎧 🎭",
-        "/media/F4/u":     "✅ KabareRo 🎧 🎭",
-        "/media/F5/u":     "✅ KabareRo 🎧 🎭",
-        "/media/F6/u":     "✅ KabareRo 🎧 🎭",
-        "/media/F7/u":     "✅ KabareRo 🎧 🎭",
-        "/media/F8/u":     "✅ KabareRo 🎧 🎭",
-        "/media/F9/u":     "✅ KabareRo 🎧 🎭",
-        "/media/F10/u":    "✅ KabareRo 🎧 🎭",
-        "/media/F11/u":    "✅ KabareRo 🎧 🎭",
-        "/media/F12/u":    "✅ KabareRo 🎧 🎭",
-        "/media/F13/u":    "✅ KabareRo 🎧 🎭",
-        "/media/F14/u":    "✅ KabareRo 🎧 🎭",
-        "/media/F15/u":    "✅ KabareRo 🎧 🎭",
-
-		"/media/x/tv":    "📺 TV-műsorok",
-        "/media/F1/tv":    "📺 TV-műsorok",
-        "/media/F2/tv":    "📺 TV-műsorok",
-        "/media/F3/tv":    "📺 TV-műsorok",
-        "/media/F4/tv":    "📺 TV-műsorok",
-        "/media/F5/tv":    "📺 TV-műsorok",
-        "/media/F6/tv":    "📺 TV-műsorok",
-        "/media/F7/tv":    "📺 TV-műsorok",
-        "/media/F8/tv":    "📺 TV-műsorok",
-        "/media/F9/tv":    "📺 TV-műsorok",
-        "/media/F10/tv":   "📺 TV-műsorok",
-        "/media/F11/tv":   "📺 TV-műsorok",
-        "/media/F12/tv":   "📺 TV-műsorok",
-        "/media/F13/tv":   "📺 TV-műsorok",
-        "/media/F14/tv":   "📺 TV-műsorok",
-        "/media/F15/tv":   "📺 TV-műsorok",		
-	
-		"/media/x/app":     "✅ Android App 🤖",
-
-	}
-
-    blacklistedPaths = []string{
-        "/media/x/x",
-        "/media/F0/x",
-        "/media/F1/x",
-        "/media/F2/x",
-        "/media/F3/x",
-        "/media/F4/x",
-        "/media/F5/x",
-        "/media/F6/x",
-        "/media/F7/x",
-        "/media/F8/x",
-        "/media/F9/x",
-        "/media/F0/xm",
-        "/media/F1/xm",
-        "/media/F2/xm",
-        "/media/F3/xm",
-        "/media/F4/xm",
-        "/media/F5/xm",
-        "/media/F6/xm",
-        "/media/F7/xm",
-        "/media/F8/xm",
-        "/media/F9/xm",
-    }
+	customMessages   map[string]string
+	blacklistedPaths []string
 )
 
+func init() {
+	drives := []string{
+		"x",
+		"F1", "F2", "F3", "F4", "F5",
+		"F6", "F7", "F8", "F9", "F10",
+		"F11", "F12", "F13", "F14", "F15",
+	}
+
+	customMessages = make(map[string]string, len(drives)*len(suffixLabels))
+	for _, drive := range drives {
+		for suffix, label := range suffixLabels {
+			customMessages["/media/"+drive+"/"+suffix] = label
+		}
+	}
+
+	// Blacklisted paths: F0–F9 /x és /xm, plus /media/x/x
+	blacklistedPaths = []string{"/media/x/x"}
+	for i := 0; i <= 9; i++ {
+		drive := fmt.Sprintf("F%d", i)
+		blacklistedPaths = append(blacklistedPaths,
+			"/media/"+drive+"/x",
+			"/media/"+drive+"/xm",
+		)
+	}
+}
+
+// Shared SQL query base
+const mediaQueryBase = `
+	SELECT i.Name,
+	       COALESCE(i.Genres, '') as Genres,
+	       COALESCE(i.Overview, '') as Overview,
+	       COALESCE(i.RunTimeTicks, 0) as RunTimeTicks,
+	       COALESCE(i.ProductionYear, 0) as ProductionYear,
+	       i.DateCreated,
+	       COALESCE(i.Path, '') as Path,
+	       CASE
+	           WHEN i.Type = 'MediaBrowser.Controller.Entities.Movies.Movie' THEN 'Movie'
+	           WHEN i.Type = 'MediaBrowser.Controller.Entities.TV.Series'    THEN 'Series'
+	           WHEN i.Type = 'MediaBrowser.Controller.Entities.TV.Episode'   THEN 'Episode'
+	           ELSE 'Other'
+	       END as MediaType
+	FROM BaseItems i`
+
+// MediaUploadPlugin watches the Jellyfin DB and announces new media to IRC/Discord.
 type MediaUploadPlugin struct {
 	bot             *YnMIrC.Client
 	discord         *discord.DiscordAdapter
 	cfg             *YnMConfig.Config
-	sentDates       []string
-	lastDate        string
 	ticker          *time.Ticker
 	stopChan        chan struct{}
 	pending         map[string]*pendingMedia
-	mu          sync.RWMutex
+	mu              sync.Mutex
 	ircChannels     []string
 	discordChannels []string
+
+	// sentPaths is the single source of truth for deduplication.
+	// Key = full file path; value = true if already sent.
+	sentPaths     map[string]bool
+	sentPathsList []string // ordered list for capped persistence
 }
 
-// Új konstruktor: config-ból automatikusan szétválogatja IRC és Discord csatornákat
+// NewMediaUploadPluginWithDiscord creates a plugin with both IRC and Discord support.
 func NewMediaUploadPluginWithDiscord(bot *YnMIrC.Client, config *YnMConfig.Config, discordAdapter *discord.DiscordAdapter) *MediaUploadPlugin {
-	var discordChannels []string
-	var ircChannels []string
-	
-	//log.Printf("🔍 MediaUpload csatornák feldolgozása...")
-	
-	// Csatornák szétválogatása
+	var discordChannels, ircChannels []string
 	for _, channel := range config.MediaUpload.Channels {
 		if isDiscordChannelMedia(channel) {
 			discordChannels = append(discordChannels, channel)
-			//log.Printf("  🎮 Discord csatorna: %s", channel)
 		} else {
 			ircChannels = append(ircChannels, channel)
-			//log.Printf("  📡 IRC csatorna: %s", channel)
 		}
 	}
-	
-	//log.Printf("📊 MediaUpload csatorna összesítő: %d IRC, %d Discord", len(ircChannels), len(discordChannels))
-	
 	return &MediaUploadPlugin{
 		bot:             bot,
 		discord:         discordAdapter,
@@ -397,52 +152,40 @@ func NewMediaUploadPluginWithDiscord(bot *YnMIrC.Client, config *YnMConfig.Confi
 		discordChannels: discordChannels,
 		stopChan:        make(chan struct{}),
 		pending:         make(map[string]*pendingMedia),
+		sentPaths:       make(map[string]bool),
+		sentPathsList:   []string{},
 	}
 }
 
-// Eredeti IRC-only konstruktor (backward compatibility)
+// NewMediaUploadPlugin creates an IRC-only plugin (backward compatibility).
 func NewMediaUploadPlugin(bot *YnMIrC.Client, cfg *YnMConfig.Config) *MediaUploadPlugin {
 	var ircChannels []string
-	
 	for _, channel := range cfg.MediaUpload.Channels {
 		if !isDiscordChannelMedia(channel) {
 			ircChannels = append(ircChannels, channel)
 		}
 	}
-	
 	return &MediaUploadPlugin{
-		bot:         bot,
-		cfg:         cfg,
-		ircChannels: ircChannels,
-		stopChan:    make(chan struct{}),
-		pending:     make(map[string]*pendingMedia),
+		bot:           bot,
+		cfg:           cfg,
+		ircChannels:   ircChannels,
+		stopChan:      make(chan struct{}),
+		pending:       make(map[string]*pendingMedia),
+		sentPaths:     make(map[string]bool),
+		sentPathsList: []string{},
 	}
 }
 
+func (p *MediaUploadPlugin) Name() string { return "MediaUpload" }
 
-func (p *MediaUploadPlugin) Name() string {
-	return "MediaUpload"
-}
+func (p *MediaUploadPlugin) HandleMessage(msg YnMIrC.Message) string { return "" }
 
-func (p *MediaUploadPlugin) HandleMessage(msg YnMIrC.Message) string {
-	return ""
-}
+func (p *MediaUploadPlugin) OnTick() []YnMIrC.Message { return nil }
 
-func (p *MediaUploadPlugin) isPathBlacklisted(path string) bool {
-	parts := strings.Split(strings.Trim(path, "/"), "/")
-	var basePath string
-	if len(parts) >= 3 {
-		basePath = "/" + strings.Join(parts[0:3], "/")
-	} else {
-		basePath = path
-	}
-	
-	for _, blacklisted := range blacklistedPaths {
-		if basePath == blacklisted {
-			return true
-		}
-	}
-	return false
+// sentPathsFile returns the path to the persistence file for sent paths.
+// Derived automatically from the existing SentDatesFile config key.
+func (p *MediaUploadPlugin) sentPathsFile() string {
+	return p.cfg.MediaUpload.SentDatesFile + ".paths"
 }
 
 func (p *MediaUploadPlugin) Start() error {
@@ -450,29 +193,21 @@ func (p *MediaUploadPlugin) Start() error {
 		return nil
 	}
 
-	//log.Printf("ℹ️ MediaUpload plugin elindult. Időzítés: %d perc", p.cfg.MediaUpload.IntervalMinutes)
-	if len(p.ircChannels) > 0 {
-		//log.Printf("📡 IRC csatornák: %v", p.ircChannels)
-	}
-	if len(p.discordChannels) > 0 {
-		//log.Printf("🎮 Discord csatornák: %v", p.discordChannels)
-	}
-	
-	// Üres csatorna lista figyelmeztetés
 	if len(p.ircChannels) == 0 && len(p.discordChannels) == 0 {
 		log.Printf("⚠️ FIGYELEM: MediaUpload plugin csatorna lista üres!")
 	}
 
-	// Betöltjük a már elküldött dátumokat
-	var err error
-	p.sentDates, err = p.loadSentDates()
+	// Load persisted sent paths and seed the in-memory map.
+	paths, err := p.loadSentPaths()
 	if err != nil {
 		return err
 	}
+	p.sentPathsList = paths
+	for _, path := range paths {
+		p.sentPaths[path] = true
+	}
 
-	// Indítjuk a ticker-t
 	p.ticker = time.NewTicker(time.Duration(p.cfg.MediaUpload.IntervalMinutes) * time.Minute)
-	
 	go func() {
 		for {
 			select {
@@ -483,7 +218,6 @@ func (p *MediaUploadPlugin) Start() error {
 			}
 		}
 	}()
-
 	return nil
 }
 
@@ -493,40 +227,72 @@ func (p *MediaUploadPlugin) Stop() {
 	}
 	select {
 	case <-p.stopChan:
-		// már zárt
 	default:
 		close(p.stopChan)
 	}
 }
 
-func (p *MediaUploadPlugin) loadSentDates() ([]string, error) {
-	if _, err := os.Stat(p.cfg.MediaUpload.SentDatesFile); os.IsNotExist(err) {
-		// Fájl nem létezik, üres listát adunk vissza
+// ─── Persistence ────────────────────────────────────────────────────────────
+
+func (p *MediaUploadPlugin) loadSentPaths() ([]string, error) {
+	file := p.sentPathsFile()
+	if _, err := os.Stat(file); os.IsNotExist(err) {
 		return []string{}, nil
 	}
-	
-	data, err := os.ReadFile(p.cfg.MediaUpload.SentDatesFile)
+	data, err := os.ReadFile(file)
 	if err != nil {
 		return nil, err
 	}
-	
-	var dates []string
+	var paths []string
 	if len(data) > 0 {
-		err = json.Unmarshal(data, &dates)
-		if err != nil {
+		if err = json.Unmarshal(data, &paths); err != nil {
 			return nil, err
 		}
 	}
-	return dates, nil
+	return paths, nil
 }
 
-func (p *MediaUploadPlugin) saveSentDates(dates []string) error {
-	data, err := json.Marshal(dates)
+func (p *MediaUploadPlugin) saveSentPaths(paths []string) error {
+	data, err := json.Marshal(paths)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(p.cfg.MediaUpload.SentDatesFile, data, 0644)
+	return os.WriteFile(p.sentPathsFile(), data, 0644)
 }
+
+// markSent records a path as sent (thread-safe).
+// Returns false if the path was already marked, true if newly marked.
+// MUST be called without p.mu held.
+func (p *MediaUploadPlugin) markSent(path string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.sentPaths[path] {
+		return false
+	}
+	p.sentPaths[path] = true
+	p.sentPathsList = append(p.sentPathsList, path)
+
+	// Cap the list and remove oldest entries from the map.
+	if len(p.sentPathsList) > maxSentPaths {
+		excess := p.sentPathsList[:len(p.sentPathsList)-maxSentPaths]
+		for _, old := range excess {
+			delete(p.sentPaths, old)
+		}
+		p.sentPathsList = p.sentPathsList[len(p.sentPathsList)-maxSentPaths:]
+	}
+
+	_ = p.saveSentPaths(p.sentPathsList)
+	return true
+}
+
+func (p *MediaUploadPlugin) isSent(path string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.sentPaths[path]
+}
+
+// ─── Core logic ─────────────────────────────────────────────────────────────
 
 func (p *MediaUploadPlugin) checkAndSendMedia() {
 	m, err := p.getLatestMedia()
@@ -534,230 +300,199 @@ func (p *MediaUploadPlugin) checkAndSendMedia() {
 		return
 	}
 
-	created := strings.Split(m.DateCreated, ".")[0]
-	if p.contains(p.sentDates, created) {
+	// Fast exit: already sent.
+	if p.isSent(m.Path) {
 		return
 	}
 
-	// Tiltólista ellenőrzés
+	// Blacklist / adult content filter.
 	if strings.Contains(strings.ToLower(m.Title), "xxx") || p.isPathBlacklisted(m.Path) {
 		return
 	}
 
-	// Ha van leírás, küldjük ki rögtön
+	// Has description → send immediately.
 	if m.Overview != "" {
 		p.sendMedia(m)
 		return
 	}
 
-	// Ha nincs leírás, pending listára tesszük
-	key := m.Path
-	if _, exists := p.pending[key]; !exists {
-		p.pending[key] = &pendingMedia{
-			item:      m,
-			timestamp: time.Now(),
-		}
+	// No description yet → add to pending queue.
+	p.mu.Lock()
+	if _, exists := p.pending[m.Path]; !exists {
+		p.pending[m.Path] = &pendingMedia{item: m, timestamp: time.Now()}
 	}
+	// Snapshot pending entries so we can process them without holding the lock.
+	type snap struct {
+		key string
+		pm  *pendingMedia
+	}
+	snapshots := make([]snap, 0, len(p.pending))
+	for k, pm := range p.pending {
+		snapshots = append(snapshots, snap{k, pm})
+	}
+	p.mu.Unlock()
 
-	// Ellenőrizzük a pending filmeket
-	for key, pm := range p.pending {
-		// újra lekérjük a leírást
-		latest, err := p.getLatestMediaByPath(pm.item.Path)
+	for _, s := range snapshots {
+		// Already sent in a previous iteration?
+		if p.isSent(s.pm.item.Path) {
+			p.mu.Lock()
+			delete(p.pending, s.key)
+			p.mu.Unlock()
+			continue
+		}
+
+		// Re-query DB to see if description has appeared.
+		latest, err := p.getLatestMediaByPath(s.pm.item.Path)
 		if err != nil || latest == nil {
 			continue
 		}
 
-		// Ha van leírás, küldjük ki
 		if latest.Overview != "" {
 			p.sendMedia(latest)
-			delete(p.pending, key)
+			p.mu.Lock()
+			delete(p.pending, s.key)
+			p.mu.Unlock()
 			continue
 		}
 
-		// Ha eltelt 3 perc, küldjük ki "Nincs elérhető leírás."-szal
-		if time.Since(pm.timestamp) > 3*time.Minute {
-			pm.item.Overview = "Nincs elérhető leírás."
-			p.sendMedia(pm.item)
-			delete(p.pending, key)
+		// Timeout: send without description.
+		if time.Since(s.pm.timestamp) > 3*time.Minute {
+			s.pm.item.Overview = "Nincs elérhető leírás."
+			p.sendMedia(s.pm.item)
+			p.mu.Lock()
+			delete(p.pending, s.key)
+			p.mu.Unlock()
 		}
 	}
 }
 
+// sendMedia delivers the item to all configured channels.
+// Internally calls markSent — duplicate calls are safe and are silently ignored.
 func (p *MediaUploadPlugin) sendMedia(m *MediaItem) {
+	// Atomic check-and-mark: if already sent, abort.
+	if !p.markSent(m.Path) {
+		return
+	}
+
 	messages := p.FormatMediaMessage(m)
-	
-	// IRC csatornák
 	for _, msg := range messages {
 		for _, ch := range p.ircChannels {
 			p.bot.SendMessage(ch, msg)
-			//log.Printf("✅ MediaUpload üzenet elküldve IRC %s csatornára: %s", ch, m.Title)
 			time.Sleep(1 * time.Second)
 		}
 	}
-	
-	// Discord csatornák
+
 	if p.discord != nil && len(p.discordChannels) > 0 {
-		// Discordra formázott üzenet
 		discordMsg := p.FormatDiscordMediaMessage(m)
 		for _, ch := range p.discordChannels {
-			err := p.discord.SendMessage(ch, discordMsg)
-			if err != nil {
+			if err := p.discord.SendMessage(ch, discordMsg); err != nil {
 				log.Printf("❌ MediaUpload Discord hiba (%s): %v", ch, err)
-			} else {
-				//log.Printf("✅ MediaUpload üzenet elküldve Discord %s csatornára: %s", ch, m.Title)
 			}
 			time.Sleep(1 * time.Second)
 		}
 	}
-
-	created := strings.Split(m.DateCreated, ".")[0]
-	p.sentDates = append(p.sentDates, created)
-	_ = p.saveSentDates(p.sentDates)
-	p.lastDate = m.DateCreated
 }
 
-// Discordra optimalizált formázás
-func (p *MediaUploadPlugin) FormatDiscordMediaMessage(m *MediaItem) string {
-	parts := strings.Split(strings.Trim(m.Path, "/"), "/")
-	var basePath string
-	if len(parts) >= 3 {
-		basePath = "/" + strings.Join(parts[0:3], "/")
-	} else {
-		basePath = m.Path
-	}
-	
-	custom := customMessages[basePath]
-	if custom == "" {
-		custom = "✅ Media" // alapértelmezett üzenet
-	}
+// ─── Database ───────────────────────────────────────────────────────────────
 
-	runtime := ""
-	if ticks, err := p.parseRuntimeTicks(m.RuntimeTicks); err == nil {
-		runtime = ticks
-	}
-	
-	overview := m.Overview
-	if len(overview) > 1000 {
-		if idx := strings.LastIndex(overview[:1000], "."); idx > 0 {
-			overview = overview[:idx+1]
-		} else {
-			overview = overview[:1000]
-		}
-	}
-
-	created := strings.Split(m.DateCreated, ".")[0]
-
-	return fmt.Sprintf("**「 ✦ %s ✦ 」**\n🎭 **Műfaj:** %s\n👆 **Feltöltve:** %s | 📂 **Kategória:** %s \n⏰ **Időtartam:** %s | 📅 **Év:** %d\n📝 **Leírás:** %s",
-		m.Title, m.Genres, created, custom, runtime, m.ProductionYear, overview)
-}
-
-func (p *MediaUploadPlugin) getLatestMediaByPath(path string) (*MediaItem, error) {
+func (p *MediaUploadPlugin) openDB() (*sql.DB, error) {
 	db, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?mode=ro", p.cfg.MediaUpload.JellyfinDB))
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
-	defer db.Close()
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to ping database: %w", err)
+	}
+	return db, nil
+}
 
-	query := `
-		SELECT i.Name, 
-		       COALESCE(i.Genres, '') as Genres,
-		       COALESCE(i.Overview, '') as Overview, 
-		       COALESCE(i.RunTimeTicks, 0) as RunTimeTicks,
-		       COALESCE(i.ProductionYear, 0) as ProductionYear,
-		       i.DateCreated,
-		       COALESCE(i.Path, '') as Path,
-		       CASE
-		           WHEN i.Type = 'MediaBrowser.Controller.Entities.Movies.Movie' THEN 'Movie'
-		           WHEN i.Type = 'MediaBrowser.Controller.Entities.TV.Series' THEN 'Series'
-		           WHEN i.Type = 'MediaBrowser.Controller.Entities.TV.Episode' THEN 'Episode'
-		           ELSE 'Other'
-		       END as MediaType
-		FROM BaseItems i
-		WHERE i.Path = ?
-		LIMIT 1`
-
-	row := db.QueryRow(query, path)
+func scanMediaRow(row *sql.Row) (*MediaItem, error) {
 	var m MediaItem
-	err = row.Scan(&m.Title, &m.Genres, &m.Overview, &m.RuntimeTicks,
+	err := row.Scan(&m.Title, &m.Genres, &m.Overview, &m.RuntimeTicks,
 		&m.ProductionYear, &m.DateCreated, &m.Path, &m.MediaType)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
 		return nil, fmt.Errorf("failed to scan row: %w", err)
 	}
-
 	return &m, nil
 }
 
 func (p *MediaUploadPlugin) getLatestMedia() (*MediaItem, error) {
-	db, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?mode=ro", p.cfg.MediaUpload.JellyfinDB))
+	db, err := p.openDB()
 	if err != nil {
-		return nil, fmt.Errorf("failed to open database: %w", err)
+		return nil, err
 	}
 	defer db.Close()
 
-	// Tesztelni kellene a kapcsolatot
-	if err := db.Ping(); err != nil {
-		return nil, fmt.Errorf("failed to ping database: %w", err)
-	}
-
-	query := `
-		SELECT i.Name, 
-		       COALESCE(i.Genres, '') as Genres,
-		       COALESCE(i.Overview, '') as Overview, 
-		       COALESCE(i.RunTimeTicks, 0) as RunTimeTicks,
-		       COALESCE(i.ProductionYear, 0) as ProductionYear,
-		       i.DateCreated,
-		       COALESCE(i.Path, '') as Path,
-		       CASE
-		           WHEN i.Type = 'MediaBrowser.Controller.Entities.Movies.Movie' THEN 'Movie'
-		           WHEN i.Type = 'MediaBrowser.Controller.Entities.TV.Series' THEN 'Series'
-		           WHEN i.Type = 'MediaBrowser.Controller.Entities.TV.Episode' THEN 'Episode'
-		           ELSE 'Other'
-		       END as MediaType
-		FROM BaseItems i
-		WHERE i.Type IN ('MediaBrowser.Controller.Entities.Movies.Movie', 
-		                 'MediaBrowser.Controller.Entities.TV.Series', 
-		                 'MediaBrowser.Controller.Entities.TV.Episode')
+	q := mediaQueryBase + `
+		WHERE i.Type IN (
+		    'MediaBrowser.Controller.Entities.Movies.Movie',
+		    'MediaBrowser.Controller.Entities.TV.Series',
+		    'MediaBrowser.Controller.Entities.TV.Episode')
 		  AND i.DateCreated IS NOT NULL
 		ORDER BY i.DateCreated DESC
 		LIMIT 1`
 
-	row := db.QueryRow(query)
-	var m MediaItem
-	
-	err = row.Scan(&m.Title, &m.Genres, &m.Overview, &m.RuntimeTicks,
-		&m.ProductionYear, &m.DateCreated, &m.Path, &m.MediaType)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil // nincs új media
-		}
-		return nil, fmt.Errorf("failed to scan row: %w", err)
-	}
-
-	return &m, nil
+	return scanMediaRow(db.QueryRow(q))
 }
 
-func (p *MediaUploadPlugin) FormatMediaMessage(m *MediaItem) []string {
-	parts := strings.Split(strings.Trim(m.Path, "/"), "/")
-	var basePath string
-	if len(parts) >= 3 {
-		basePath = "/" + strings.Join(parts[0:3], "/")
-	} else {
-		basePath = m.Path
+func (p *MediaUploadPlugin) getLatestMediaByPath(path string) (*MediaItem, error) {
+	db, err := p.openDB()
+	if err != nil {
+		return nil, err
 	}
-	
-	custom := customMessages[basePath]
-	if custom == "" {
-		custom = "✅ Media" // alapértelmezett üzenet
-	}
+	defer db.Close()
 
+	q := mediaQueryBase + " WHERE i.Path = ? LIMIT 1"
+	return scanMediaRow(db.QueryRow(q, path))
+}
+
+// ─── Path / category helpers ────────────────────────────────────────────────
+
+func (p *MediaUploadPlugin) isPathBlacklisted(path string) bool {
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	var base string
+	if len(parts) >= 3 {
+		base = "/" + strings.Join(parts[0:3], "/")
+	} else {
+		base = path
+	}
+	for _, bl := range blacklistedPaths {
+		if base == bl {
+			return true
+		}
+	}
+	return false
+}
+
+// basePath extracts the first 3 path components, e.g. /media/F1/f
+func basePath(path string) string {
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	if len(parts) >= 3 {
+		return "/" + strings.Join(parts[0:3], "/")
+	}
+	return path
+}
+
+// categoryLabel returns the display label for a media path.
+func categoryLabel(path string) string {
+	if label, ok := customMessages[basePath(path)]; ok {
+		return label
+	}
+	return "✅ Media"
+}
+
+// ─── Formatting ─────────────────────────────────────────────────────────────
+
+func (p *MediaUploadPlugin) FormatMediaMessage(m *MediaItem) []string {
 	runtime := ""
 	if ticks, err := p.parseRuntimeTicks(m.RuntimeTicks); err == nil {
 		runtime = ticks
 	}
+
 	overview := m.Overview
 	if len(overview) > 600 {
 		if idx := strings.LastIndex(overview[:600], "."); idx > 0 {
@@ -771,10 +506,33 @@ func (p *MediaUploadPlugin) FormatMediaMessage(m *MediaItem) []string {
 
 	return []string{
 		fmt.Sprintf(" 「 ✦ %s ✦ 」 | 🎭: %s", m.Title, m.Genres),
-		fmt.Sprintf("👆: %s | 📂: %s ", created, custom),
+		fmt.Sprintf("👆: %s | 📂: %s ", created, categoryLabel(m.Path)),
 		fmt.Sprintf("⏰: %s | 📅: %d 🎥", runtime, m.ProductionYear),
 		fmt.Sprintf("📝: %s", overview),
 	}
+}
+
+func (p *MediaUploadPlugin) FormatDiscordMediaMessage(m *MediaItem) string {
+	runtime := ""
+	if ticks, err := p.parseRuntimeTicks(m.RuntimeTicks); err == nil {
+		runtime = ticks
+	}
+
+	overview := m.Overview
+	if len(overview) > 1000 {
+		if idx := strings.LastIndex(overview[:1000], "."); idx > 0 {
+			overview = overview[:idx+1]
+		} else {
+			overview = overview[:1000]
+		}
+	}
+
+	created := strings.Split(m.DateCreated, ".")[0]
+
+	return fmt.Sprintf(
+		"**「 ✦ %s ✦ 」**\n🎭 **Műfaj:** %s\n👆 **Feltöltve:** %s | 📂 **Kategória:** %s \n⏰ **Időtartam:** %s | 📅 **Év:** %d\n📝 **Leírás:** %s",
+		m.Title, m.Genres, created, categoryLabel(m.Path), runtime, m.ProductionYear, overview,
+	)
 }
 
 func (p *MediaUploadPlugin) parseRuntimeTicks(ticks any) (string, error) {
@@ -791,23 +549,11 @@ func (p *MediaUploadPlugin) parseRuntimeTicks(ticks any) (string, error) {
 	default:
 		return "", fmt.Errorf("unexpected type for ticks: %T", ticks)
 	}
-	
-	sec := t / 10000000
+
+	sec := t / 10_000_000
 	h := sec / 3600
 	m := (sec % 3600) / 60
 	s := sec % 60
 	return fmt.Sprintf("%02d:%02d:%02d", h, m, s), nil
 }
 
-func (p *MediaUploadPlugin) contains(list []string, item string) bool {
-	for _, v := range list {
-		if v == item {
-			return true
-		}
-	}
-	return false
-}
-
-func (p *MediaUploadPlugin) OnTick() []YnMIrC.Message {
-	return nil
-}
