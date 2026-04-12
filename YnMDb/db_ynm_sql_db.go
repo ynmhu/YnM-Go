@@ -439,7 +439,7 @@ func getTableDefinitions() []struct {
 			channels TEXT NOT NULL,
 			server TEXT NOT NULL,
 			connected INTEGER NOT NULL,
-			last_updated DATETIME NOT NULL,
+			last_updated DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			total_users INTEGER NOT NULL DEFAULT 0,
 			owner TEXT NOT NULL DEFAULT '',
 			globaladmins TEXT NOT NULL DEFAULT '[]',

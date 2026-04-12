@@ -53,18 +53,10 @@ func (p *YnMApiPlugin) isDatabaseReady() bool {
 }
 
 func (p *YnMApiPlugin) getDB() (*sql.DB, error) {
-    // ha az admin db már elérhető, add vissza
-    if p.adminPlugin != nil && p.adminPlugin.Db != nil && p.adminPlugin.Db.SQL != nil {
-        return p.adminPlugin.Db.SQL, nil
-    }
-
-    p.dbMutex.RLock()
-    db := p.db
-    p.dbMutex.RUnlock()
-    if db == nil {
+    if p.adminPlugin == nil || p.adminPlugin.Db == nil || p.adminPlugin.Db.SQL == nil {
         return nil, fmt.Errorf("admin db not ready")
     }
-    return db, nil
+    return p.adminPlugin.Db.SQL, nil
 }
 
 func (p *YnMApiPlugin) ensureWebAuthTables() error {
