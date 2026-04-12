@@ -25,7 +25,6 @@ import (
     "git.ynm.hu/markus/YnM-Go/YnMModule"
     "git.ynm.hu/markus/YnM-Go/YnMAdmin"
     "git.ynm.hu/markus/YnM-Go/YnMConfig"
-	"git.ynm.hu/markus/YnM-Go/YnMDb"
 )
 
 
@@ -41,7 +40,6 @@ var RoleLevels = map[string]int{
 type YnMApiPlugin struct {
     client      *YnMIrC.Client
     db          *sql.DB
-	adminDB     *YnMDb.AdminDB
     quit        chan struct{}
     adminPlugin *owner.YnmAdminPlugin   
     passwords   map[string]*PasswordEntry
@@ -218,7 +216,7 @@ type UserProfileUpdate struct {
     AvatarURL  *string    `json:"avatar_url,omitempty"`
 }
 
-func NewYnMApiPlugin(client *YnMIrC.Client, cfg *YnMConfig.Config, adminPlugin *owner.YnmAdminPlugin, adminDB *YnMDb.AdminDB) *YnMApiPlugin {
+func NewYnMApiPlugin(client *YnMIrC.Client, cfg *YnMConfig.Config, adminPlugin *owner.YnmAdminPlugin) *YnMApiPlugin {
 
     YnMApiCfg, err := YnMConfig.LoadYnMApiConfig("YnMConfig/ynm-api.yaml")
     if err != nil {
@@ -245,8 +243,6 @@ func NewYnMApiPlugin(client *YnMIrC.Client, cfg *YnMConfig.Config, adminPlugin *
     
     plugin := &YnMApiPlugin{
         client:      client,
-		db: adminPlugin.Db.SQL,
-		adminDB:     adminDB,
         quit:        make(chan struct{}),
         adminPlugin: adminPlugin,
         passwords:   make(map[string]*PasswordEntry),

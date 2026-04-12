@@ -484,7 +484,7 @@ func (p *YnMApiPlugin) handleBotStatusHistory(w http.ResponseWriter, r *http.Req
                nick, version, go_version, bot_uptime, server_uptime, channels, 
                server, connected, last_updated, owner
         FROM bot_stats 
-        WHERE key = 'YnM-Go'  
+        WHERE key = 'YnM-Go'
         ORDER BY last_updated DESC
         LIMIT ?
     `, limit)
