@@ -338,10 +338,13 @@ func (c *Client) sendRawDirect(msg string) error {
 	}
 
 	_, err := conn.Write([]byte(msg + "\r\n"))
-	if err == nil {
-		//fmt.Println(">>", msg)
+	if err != nil {
+		log.Printf("❌ Write hiba: %v", err)
+		go c.Disconnect(false)
+		return err
 	}
-	return err
+
+	return nil
 }
 
 func (c *Client) SendRaw(msg string) error {

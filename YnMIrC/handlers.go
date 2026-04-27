@@ -152,35 +152,87 @@ func checkGlobalFlood(c *Client, nick string) bool {
 // ─────────────────────── Main Read Loop ─────────────────────────
 
 func (c *Client) readLoop() {
-    defer func() { c.Disconnect(true) }()
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("💥 Panic a readLoop-ban [%s]: %v", c.config.Server, r)
+		}
 
-    reader := bufio.NewReader(c.conn)
+		log.Printf("❌ readLoop leállt [%s], auto reconnect indul", c.config.Server)
+		c.Disconnect(false)
+	}()
 
-    for {
-        line, err := reader.ReadString('\n')
-        if err != nil {
-            fmt.Printf("Olvasási hiba: %v\n", err)
-            return
-        }
+	c.mu.RLock()
+	conn := c.conn
+	c.mu.RUnlock()
 
-        line = strings.TrimSpace(line)
-        if line == "" {
-            continue
-        }
-		//log.Printf("[RAW-IN-BEFORE] %s", line)
+	if conn == nil {
+		log.Printf("❌ Nincs aktív kapcsolat [%s]", c.config.Server)
+		return
+	}
+
+	reader := bufio.NewReader(conn)
+
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			log.Printf("❌ Olvasási hiba [%s]: %v", c.config.Server, err)
+			return
+		}
+
+		line = strings.TrimSpace(line)
+
+		if line == "" {
+			continue
+		}
+
+		// Null / CR védelem
+		line = strings.ReplaceAll(line, "\r", "")
+		line = strings.ReplaceAll(line, "\x00", "")
+
+		// Debug raw opcionális
+		// log.Printf("[RAW-IN] %s", line)
+
+		// malformed
+		if strings.Contains(strings.ToLower(line), "malformed") {
+			log.Printf("❌ Malformed line [%s]: %s", c.config.Server, line)
+			return
+		}
+
+		// túl hosszú flood / sérült packet
+		if len(line) > 4000 {
+			log.Printf("⚠️ Túl hosszú sor eldobva [%s]: %d byte", c.config.Server, len(line))
+			continue
+		}
+
 		line = stripIRCTags(line)
-		//log.Printf("[RAW-IN-AFTER ] %s", line)
 
-        receivedTime := time.Now()
+		receivedTime := time.Now()
 
-        if strings.HasPrefix(line, "PING ") {
-            c.SendRaw(strings.Replace(line, "PING", "PONG", 1))
-            continue
-        }
+		// Ping-Pong
+		if strings.HasPrefix(line, "PING ") {
+			pong := strings.Replace(line, "PING", "PONG", 1)
 
-        c.handleRawMessage(line, receivedTime)
-    }
+			if err := c.SendRaw(pong); err != nil {
+				log.Printf("❌ PONG küldési hiba [%s]: %v", c.config.Server, err)
+				return
+			}
+
+			continue
+		}
+
+		// Handler panic védelem
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("💥 handleRawMessage panic [%s]: %v | LINE: %s", c.config.Server, r, line)
+				}
+			}()
+
+			c.handleRawMessage(line, receivedTime)
+		}()
+	}
 }
+
 
 func stripIRCTags(line string) string {
     if strings.HasPrefix(line, "@") {

@@ -40,7 +40,7 @@ const (
 	MAX_RETRIES        = 3
 	RETRY_DELAY        = 15 * time.Second
 )
-var YnMVersion string = "YnM-v1.0.40.64"
+var YnMVersion string = "YnM-v1.0.40.65"
 
 type BotData struct {
 	BotUUID   string `json:"bot_uuid"`
