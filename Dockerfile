@@ -31,6 +31,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 # -------------------------------------------------------------
 
 FROM alpine:3.18
+LABEL org.opencontainers.image.source=https://github.com/ynmhu/ynm-go
 RUN apk add --no-cache git gcc  musl-dev ca-certificates tzdata sqlite su-exec gawk
 WORKDIR /app
 

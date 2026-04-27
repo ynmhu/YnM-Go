@@ -240,19 +240,39 @@ func (h *TorrentRSS) formatDate(pubDate string) string {
 	return t.Format("2006.01.02 15:04")
 }
 
+func sanitizeIRCText(s string, maxLen int) string {
+	// CR/LF/TAB eltávolítás
+	s = strings.ReplaceAll(s, "\r", " ")
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.ReplaceAll(s, "\t", " ")
+
+	// Többszörös space javítás
+	s = strings.Join(strings.Fields(s), " ")
+
+	// UTF-8 biztonság + hossz limit
+	runes := []rune(s)
+	if len(runes) > maxLen {
+		s = string(runes[:maxLen]) + "..."
+	}
+
+	return strings.TrimSpace(s)
+}
+
 func (h *TorrentRSS) formatTorrentMessage(index int, item RSSItem) string {
-	cleanTitle := strings.TrimSpace(strings.ReplaceAll(item.Title, "\n", " "))
-	genre := strings.TrimSpace(strings.ReplaceAll(h.extractGenre(item.Description), "\n", " "))
-	
-	category := item.Category
+	cleanTitle := sanitizeIRCText(item.Title, 120)
+	genre := sanitizeIRCText(h.extractGenre(item.Description), 40)
+	category := sanitizeIRCText(item.Category, 20)
+
 	if category == "" {
 		category = "N/A"
 	}
-	
+
 	formattedDate := h.formatDate(item.PubDate)
-	
-	return fmt.Sprintf("📁 [%d] %s | 🎭 %s | 📂 %s | ⏰ %s", 
+
+	msg := fmt.Sprintf("📁 [%d] %s | 🎭 %s | 📂 %s | ⏰ %s",
 		index, cleanTitle, genre, category, formattedDate)
+
+	return sanitizeIRCText(msg, 350)
 }
 
 func (h *TorrentRSS) fetchRSSData() (*RSS, error) {
