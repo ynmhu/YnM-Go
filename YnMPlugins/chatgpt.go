@@ -109,7 +109,7 @@ func (p *ChatGPTPlugin) askChatGPTSync(prompt string) string {
 	}
 
 	reqBody := requestBody{
-		Model: "gpt-3.5-turbo",
+		Model: "mistral-small-latest",
 		Messages: []map[string]string{
 			{"role": "user", "content": prompt},
 		},
@@ -122,7 +122,7 @@ func (p *ChatGPTPlugin) askChatGPTSync(prompt string) string {
 
 	client := &http.Client{Timeout: p.timeout}
 
-	req, err := http.NewRequest("POST", "https://api.openai.com/v1/chat/completions", bytes.NewBuffer(reqBytes))
+	req, err := http.NewRequest("POST", "https://api.mistral.ai/v1/chat/completions", bytes.NewBuffer(reqBytes))
 	if err != nil {
 		return fmt.Sprintf("🔴 Error sending request: %v", err)
 	}
@@ -183,7 +183,7 @@ func (p *ChatGPTPlugin) askChatGPT(prompt, channel string) {
 	}
 
 	reqBody := requestBody{
-		Model: "gpt-3.5-turbo",
+		Model: "mistral-small-latest",
 		Messages: []map[string]string{
 			{"role": "user", "content": prompt},
 		},

@@ -195,9 +195,10 @@ func writeLastSeen(path, sha string) {
 }
 
 func (p *GitPlugin) Start() {
+	//p.checkCommits() // azonnali induláskori ellenőrzés
 	p.ticker = time.NewTicker(30 * time.Minute)
 
-	//log.Printf("🔧 Git plugin elindult. API: %s", p.apiURL)
+	log.Printf("🔧 Git plugin elindult. API: %s", p.apiURL)
 	if len(p.channels) > 0 {
 		//log.Printf("📡 Git IRC csatornák: %v", p.channels)
 	}
