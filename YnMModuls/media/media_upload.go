@@ -99,6 +99,33 @@ func init() {
 	}
 }
 
+func isAdultContent(title, overview, genres, path string) bool {
+	content := strings.ToLower(title + " " + overview + " " + genres + " " + path)
+
+	blockedWords := []string{
+		"xxx", "porn", "pussy", "cunt", "hardcore", "blowjob",
+		"deepthroat", "anal", "lesbian", "sex", "erotic",
+		"orgasm", "nude", "fuck", "milf", "hentai",
+		"onlyfans", "brazzers", "cum", "dick", "bdsm",
+		"adult", "nsfw", "18+", "xvideos", "redtube",
+		"youporn", "playboy", "escort", "slut", "fetish",
+		"masturbat", "squirt", "gangbang", "incest",
+	}
+
+	for _, word := range blockedWords {
+		if strings.Contains(content, word) {
+			return true
+		}
+	}
+
+	if strings.Contains(strings.ToLower(path), "/x/") ||
+	   strings.Contains(strings.ToLower(path), "/xm/") {
+		return true
+	}
+
+	return false
+}
+
 // Shared SQL query base
 const mediaQueryBase = `
 	SELECT i.Name,
@@ -306,7 +333,7 @@ func (p *MediaUploadPlugin) checkAndSendMedia() {
 	}
 
 	// Blacklist / adult content filter.
-	if strings.Contains(strings.ToLower(m.Title), "xxx") || p.isPathBlacklisted(m.Path) {
+	if isAdultContent(m.Title, m.Overview, m.Genres, m.Path) || p.isPathBlacklisted(m.Path) {
 		return
 	}
 
@@ -347,6 +374,12 @@ func (p *MediaUploadPlugin) checkAndSendMedia() {
 			continue
 		}
 
+		if isAdultContent(latest.Title, latest.Overview, latest.Genres, latest.Path) {
+			p.mu.Lock()
+			delete(p.pending, s.key)
+			p.mu.Unlock()
+			continue
+		}
 		if latest.Overview != "" {
 			p.sendMedia(latest)
 			p.mu.Lock()
@@ -370,6 +403,9 @@ func (p *MediaUploadPlugin) checkAndSendMedia() {
 // Internally calls markSent — duplicate calls are safe and are silently ignored.
 func (p *MediaUploadPlugin) sendMedia(m *MediaItem) {
 	// Atomic check-and-mark: if already sent, abort.
+	if isAdultContent(m.Title, m.Overview, m.Genres, m.Path) {
+		return
+	}
 	if !p.markSent(m.Path) {
 		return
 	}
