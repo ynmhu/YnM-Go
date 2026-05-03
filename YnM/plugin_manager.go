@@ -151,6 +151,7 @@ func (pm *PluginManager) UpdatePluginStatesInDB(cfg *YnMConfig.Config, channels 
 		"monitor":         cfg.Plugins.EnableMonitor,
 		"link":            cfg.Plugins.EnableLink,
 		"forum":           cfg.Plugins.EnableForum,
+		"hirek":           cfg.Plugins.EnableHirek,
 		"bruteforce":            cfg.Plugins.EnableBruteforceAttack,
 		"resourcemonitor":	cfg.Plugins.EnableResourceMonitor,
 		"webhook":         cfg.Plugins.EnableWebhook,
@@ -588,7 +589,21 @@ func (pm *PluginManager) RegisterAll(bot *YnMIrC.Client, cfg *YnMConfig.Config) 
 		forumPlugin.StartPolling() 
 		//log.Printf("✅ Forum plugin regisztrálva")
 	}
-		
+	
+	// Hírek Plugin
+
+	if cfg.Plugins.EnableHirek {
+		hirekPlugin, err := ynm.NewHirekPlugin(bot, nil)
+		if err != nil {
+			log.Fatalf("Hirek plugin hiba: %v", err)
+		}
+
+		pm.manager.Register(hirekPlugin)
+		hirekPlugin.StartPolling()
+
+		log.Printf("Hirek plugin betöltve (IRC + Discord RSS)")
+	}
+			
 	//			Learn Plugin
 	if cfg.Plugins.EnableLearn {
 		 learnPlugin, err := ynm.NewLearnPlugin(bot, ynmAdminPlugin, "./data/learn.db")
@@ -1273,6 +1288,10 @@ if cfg.Plugins.EnableWebhook {
 	case *ynm.ForumPlugin:
 		// Nincs specifikus cleanup, csak logolás
 		log.Printf("🛑 Forum plugin leállítva")
+
+	case *ynm.HirekPlugin:
+		// Nincs specifikus cleanup, csak logolás
+		log.Printf("🛑 Hirek plugin leállítva")		
 
 	case *ynm.LearnPlugin:
 		// Nincs specifikus cleanup, csak logolás

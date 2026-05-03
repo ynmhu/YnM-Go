@@ -190,6 +190,7 @@ type PluginConfig struct {
 	EnableMonitor      bool `yaml:"enable_monitor"`
 	EnableLink         bool `yaml:"enable_link"`
 	EnableForum        bool `yaml:"enable_forum"`
+	EnableHirek       bool `yaml:"enable_hirek"`
 	EnableBruteforceAttack         bool `yaml:"enable_bruteforce"`
 	EnableResourceMonitor	        bool `yaml:"enable_resource_monitor"`
 	EnableWebhook      bool `yaml:"enable_webhook"`
