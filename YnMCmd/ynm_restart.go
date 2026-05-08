@@ -70,10 +70,10 @@ func (p *ControlPlugin) HandleMessage(msg YnMIrC.Message) string {
 	
 	// Csatorna ellenőrzés - kis/nagybetű érzéketlen
 	// Engedélyezett: ConsoleChannel VAGY privát üzenet
-	if !strings.EqualFold(msg.Channel, p.adminPlugin.Cfg.ConsoleChannel) && 
-	   !isPrivate {
-		return ""
-	}
+//	if !strings.EqualFold(msg.Channel, p.adminPlugin.Cfg.ConsoleChannel) && 
+//	   !isPrivate {
+//		return ""
+//	}
 	
 	// Login Check
 	nick, hostmask := YnMModule.GetEffectiveNickAndHost(p.adminPlugin, msg.Sender)
@@ -91,7 +91,9 @@ func (p *ControlPlugin) HandleMessage(msg YnMIrC.Message) string {
 	switch command {
 	case "restart", "reboot":
 		go func() {
-			quitMsg := "♻️ A bot újraindul… https://bot.ynm.hu"
+			p.bot.SendMessage(responseTarget, "♻️ A bot újraindul… https://ynm-go.ynm.hu")
+			time.Sleep(500 * time.Millisecond)
+			quitMsg := "♻️ A bot újraindul… https://ynm-go.ynm.hu"
 			if p.bot.OnQuit != nil {
 				p.bot.OnQuit("YnM-Go", quitMsg)
 			} else {
@@ -101,10 +103,12 @@ func (p *ControlPlugin) HandleMessage(msg YnMIrC.Message) string {
 			close(p.StopChan)
 			os.Exit(0)
 		}()
-		
+			
 	case "die":
 		go func() {
-			quitMsg := "🛑 A bot leáll… https://bot.ynm.hu"
+			p.bot.SendMessage(responseTarget, "🛑 A bot leáll… https://ynm-go.ynm.hu")
+			time.Sleep(500 * time.Millisecond)
+			quitMsg := "🛑 A bot leáll… https://ynm-go.ynm.hu"
 			if p.bot.OnQuit != nil {
 				p.bot.OnQuit("YnM-Go", quitMsg)
 			} else {
@@ -148,8 +152,8 @@ func (p *ControlPlugin) HandleMessage(msg YnMIrC.Message) string {
 				}
 				return
 			}
-			p.bot.SendMessage(responseTarget, "✅ Build kész, bot újraindul… https://bot.ynm.hu")
-			quitMsg := "♻️ Bot reload && restart ... https://bot.ynm.hu"
+			p.bot.SendMessage(responseTarget, "✅ Build kész, bot újraindul… https://ynm-go.ynm.hu")
+			quitMsg := "♻️ Bot reload && restart ... https://ynm-go.ynm.hu"
 			if p.bot.OnQuit != nil {
 				p.bot.OnQuit("YnM-Go", quitMsg)
 			} else {
