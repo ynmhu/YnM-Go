@@ -17,9 +17,11 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
+
 
 	"git.ynm.hu/markus/YnM-Go/YnMConfig"
 	"git.ynm.hu/markus/YnM-Go/YnMIrC"
@@ -37,6 +39,7 @@ type MediaItem struct {
 	DateCreated    string      `json:"date_created"`
 	Path           string      `json:"path"`
 	MediaType      string      `json:"media_type"`
+	SeriesName     string      `json:"series_name"`
 }
 
 type pendingMedia struct {
@@ -119,7 +122,7 @@ func isAdultContent(title, overview, genres, path string) bool {
 	}
 
 	if strings.Contains(strings.ToLower(path), "/x/") ||
-	   strings.Contains(strings.ToLower(path), "/xm/") {
+		strings.Contains(strings.ToLower(path), "/xm/") {
 		return true
 	}
 
@@ -128,20 +131,22 @@ func isAdultContent(title, overview, genres, path string) bool {
 
 // Shared SQL query base
 const mediaQueryBase = `
-	SELECT i.Name,
-	       COALESCE(i.Genres, '') as Genres,
-	       COALESCE(i.Overview, '') as Overview,
-	       COALESCE(i.RunTimeTicks, 0) as RunTimeTicks,
-	       COALESCE(i.ProductionYear, 0) as ProductionYear,
-	       i.DateCreated,
-	       COALESCE(i.Path, '') as Path,
-	       CASE
-	           WHEN i.Type = 'MediaBrowser.Controller.Entities.Movies.Movie' THEN 'Movie'
-	           WHEN i.Type = 'MediaBrowser.Controller.Entities.TV.Series'    THEN 'Series'
-	           WHEN i.Type = 'MediaBrowser.Controller.Entities.TV.Episode'   THEN 'Episode'
-	           ELSE 'Other'
-	       END as MediaType
-	FROM BaseItems i`
+    SELECT i.Name,
+           COALESCE(i.Genres, '') as Genres,
+           COALESCE(i.Overview, '') as Overview,
+           COALESCE(i.RunTimeTicks, 0) as RunTimeTicks,
+           COALESCE(i.ProductionYear, 0) as ProductionYear,
+           i.DateCreated,
+           COALESCE(i.Path, '') as Path,
+           CASE
+               WHEN i.Type = 'MediaBrowser.Controller.Entities.Movies.Movie' THEN 'Movie'
+               WHEN i.Type = 'MediaBrowser.Controller.Entities.TV.Series'    THEN 'Series'
+               WHEN i.Type = 'MediaBrowser.Controller.Entities.TV.Episode'   THEN 'Episode'
+               ELSE 'Other'
+           END as MediaType,
+           COALESCE(series.Name, '') as SeriesName
+    FROM BaseItems i
+    LEFT JOIN BaseItems series ON series.Id = i.SeriesId`
 
 // MediaUploadPlugin watches the Jellyfin DB and announces new media to IRC/Discord.
 type MediaUploadPlugin struct {
@@ -388,10 +393,18 @@ func (p *MediaUploadPlugin) checkAndSendMedia() {
 			continue
 		}
 
-		// Timeout: send without description.
+		// Timeout: próbáljuk a sorozat leírásával feltölteni, különben placeholder.
 		if time.Since(s.pm.timestamp) > 3*time.Minute {
-			s.pm.item.Overview = "Nincs elérhető leírás."
-			p.sendMedia(s.pm.item)
+			if latest.MediaType == "Episode" && latest.SeriesName != "" {
+				if seriesOverview := p.getSeriesOverview(latest.SeriesName); seriesOverview != "" {
+					latest.Overview = seriesOverview
+				} else {
+					latest.Overview = "Nincs elérhető leírás."
+				}
+			} else {
+				latest.Overview = "Nincs elérhető leírás."
+			}
+			p.sendMedia(latest)
 			p.mu.Lock()
 			delete(p.pending, s.key)
 			p.mu.Unlock()
@@ -446,7 +459,7 @@ func (p *MediaUploadPlugin) openDB() (*sql.DB, error) {
 func scanMediaRow(row *sql.Row) (*MediaItem, error) {
 	var m MediaItem
 	err := row.Scan(&m.Title, &m.Genres, &m.Overview, &m.RuntimeTicks,
-		&m.ProductionYear, &m.DateCreated, &m.Path, &m.MediaType)
+		&m.ProductionYear, &m.DateCreated, &m.Path, &m.MediaType, &m.SeriesName)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -484,6 +497,28 @@ func (p *MediaUploadPlugin) getLatestMediaByPath(path string) (*MediaItem, error
 
 	q := mediaQueryBase + " WHERE i.Path = ? LIMIT 1"
 	return scanMediaRow(db.QueryRow(q, path))
+}
+
+// getSeriesOverview lekéri a sorozat leírását a neve alapján.
+func (p *MediaUploadPlugin) getSeriesOverview(seriesName string) string {
+	db, err := p.openDB()
+	if err != nil {
+		return ""
+	}
+	defer db.Close()
+
+	var overview string
+	err = db.QueryRow(`
+		SELECT COALESCE(Overview, '')
+		FROM BaseItems
+		WHERE Type = 'MediaBrowser.Controller.Entities.TV.Series'
+		  AND Name = ?
+		  AND Overview != ''
+		LIMIT 1`, seriesName).Scan(&overview)
+	if err != nil {
+		return ""
+	}
+	return overview
 }
 
 // ─── Path / category helpers ────────────────────────────────────────────────
@@ -529,8 +564,12 @@ func (p *MediaUploadPlugin) FormatMediaMessage(m *MediaItem) []string {
 		runtime = ticks
 	}
 
+	title := p.extractTitle(m)
+
 	overview := m.Overview
-	if len(overview) > 600 {
+	if overview == "" {
+		overview = "Nincs elérhető leírás."
+	} else if len(overview) > 600 {
 		if idx := strings.LastIndex(overview[:600], "."); idx > 0 {
 			overview = overview[:idx+1]
 		} else {
@@ -541,7 +580,7 @@ func (p *MediaUploadPlugin) FormatMediaMessage(m *MediaItem) []string {
 	created := strings.Split(m.DateCreated, ".")[0]
 
 	return []string{
-		fmt.Sprintf(" 「 ✦ %s ✦ 」 | 🎭: %s", m.Title, m.Genres),
+		fmt.Sprintf(" 「 ✦ %s ✦ 」 | 🎭: %s", title, m.Genres),
 		fmt.Sprintf("👆: %s | 📂: %s ", created, categoryLabel(m.Path)),
 		fmt.Sprintf("⏰: %s | 📅: %d 🎥", runtime, m.ProductionYear),
 		fmt.Sprintf("📝: %s", overview),
@@ -554,8 +593,12 @@ func (p *MediaUploadPlugin) FormatDiscordMediaMessage(m *MediaItem) string {
 		runtime = ticks
 	}
 
+	title := p.extractTitle(m)
+
 	overview := m.Overview
-	if len(overview) > 1000 {
+	if overview == "" {
+		overview = "Nincs elérhető leírás."
+	} else if len(overview) > 1000 {
 		if idx := strings.LastIndex(overview[:1000], "."); idx > 0 {
 			overview = overview[:idx+1]
 		} else {
@@ -567,8 +610,26 @@ func (p *MediaUploadPlugin) FormatDiscordMediaMessage(m *MediaItem) string {
 
 	return fmt.Sprintf(
 		"**「 ✦ %s ✦ 」**\n🎭 **Műfaj:** %s\n👆 **Feltöltve:** %s | 📂 **Kategória:** %s \n⏰ **Időtartam:** %s | 📅 **Év:** %d\n📝 **Leírás:** %s",
-		m.Title, m.Genres, created, categoryLabel(m.Path), runtime, m.ProductionYear, overview,
+		title, m.Genres, created, categoryLabel(m.Path), runtime, m.ProductionYear, overview,
 	)
+}
+
+func (p *MediaUploadPlugin) extractTitle(m *MediaItem) string {
+	if m.MediaType == "Episode" && m.SeriesName != "" {
+		re := regexp.MustCompile(`[Ss](\d+)[Ee](\d+)`)
+		match := re.FindStringSubmatch(m.Path)
+		if len(match) > 2 {
+			return fmt.Sprintf("%s - S%sE%s", m.SeriesName, match[1], match[2])
+		}
+		if m.Title != "" {
+			return fmt.Sprintf("%s - %s", m.SeriesName, m.Title)
+		}
+		return m.SeriesName
+	}
+	if m.Title != "" {
+		return m.Title
+	}
+	return "Ismeretlen"
 }
 
 func (p *MediaUploadPlugin) parseRuntimeTicks(ticks any) (string, error) {
@@ -592,4 +653,3 @@ func (p *MediaUploadPlugin) parseRuntimeTicks(ticks any) (string, error) {
 	s := sec % 60
 	return fmt.Sprintf("%02d:%02d:%02d", h, m, s), nil
 }
-

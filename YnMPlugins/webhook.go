@@ -78,7 +78,27 @@ func (p *WebhookPlugin) StartHTTP(port string) {
 }
 
 func (p *WebhookPlugin) handleWebhook(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
+    // 🔐 VERIFY TOKEN ELLENŐRZÉS - EZT ADD HOZZÁ!
+    if r.Method == http.MethodGet {
+        mode := r.URL.Query().Get("hub.mode")
+        token := r.URL.Query().Get("hub.verify_token")
+        challenge := r.URL.Query().Get("hub.challenge")
+        
+        expectedToken := "YnM-BoT"  // Ez egyezzen meg a Meta mezőben lévővel!
+        
+        if mode == "subscribe" && token == expectedToken {
+            log.Printf("[WebhookPlugin] ✅ Webhook verified successfully!")
+            w.WriteHeader(http.StatusOK)
+            w.Write([]byte(challenge))
+            return
+        }
+        log.Printf("[WebhookPlugin] ❌ Verification failed!")
+        w.WriteHeader(http.StatusForbidden)
+        return
+    }
+    
+    // --- INNEN MINDEN MÁS UGYANAZ, CSAK A POST KÉRÉSEKHEZ ---
+    defer r.Body.Close()
 
 	// 1. Teljes body kiolvasása naplózáshoz
 	bodyBytes, err := io.ReadAll(r.Body)
@@ -101,6 +121,123 @@ func (p *WebhookPlugin) handleWebhook(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Hibás JSON", http.StatusBadRequest)
 		return
 	}
+
+	// =================================================================
+	// 📱 WhatsApp Webhook (Meta) kezelése
+	// =================================================================
+	if object, ok := data["object"].(string); ok && object == "whatsapp_business_account" {
+		log.Printf("[WebhookPlugin] 📱 WhatsApp üzenet érkezett a Meta-tól")
+		
+		// Bejárjuk az entry-ket
+		if entries, ok := data["entry"].([]interface{}); ok {
+			for _, entry := range entries {
+				if entryMap, ok := entry.(map[string]interface{}); ok {
+					if changes, ok := entryMap["changes"].([]interface{}); ok {
+						for _, change := range changes {
+							if changeMap, ok := change.(map[string]interface{}); ok {
+								if value, ok := changeMap["value"].(map[string]interface{}); ok {
+									
+									// ⭐ ITT A LÉNYEG: contacts és messages kezelése
+									
+									// 1. Feladó nevének kiolvasása a contacts tömbből
+									senderName := "Ismeretlen"
+									senderNumber := "Ismeretlen szám"
+									
+									if contacts, ok := value["contacts"].([]interface{}); ok && len(contacts) > 0 {
+										if contact, ok := contacts[0].(map[string]interface{}); ok {
+											if profile, ok := contact["profile"].(map[string]interface{}); ok {
+												if name, ok := profile["name"].(string); ok {
+													senderName = name
+												}
+											}
+											if waID, ok := contact["wa_id"].(string); ok {
+												senderNumber = waID
+											}
+										}
+									}
+									
+									// 2. Üzenetek kiolvasása a messages tömbből
+									if messages, ok := value["messages"].([]interface{}); ok && len(messages) > 0 {
+										for _, msg := range messages {
+											if msgMap, ok := msg.(map[string]interface{}); ok {
+												messageText := ""
+												
+												// Üzenet típusának ellenőrzése
+												if msgType, ok := msgMap["type"].(string); ok {
+													switch msgType {
+													case "text":
+														if text, ok := msgMap["text"].(map[string]interface{}); ok {
+															if body, ok := text["body"].(string); ok {
+																messageText = body
+															}
+														}
+													case "image":
+														messageText = "📷 Kép"
+													case "audio":
+														messageText = "🎵 Hangüzenet"
+													case "video":
+														messageText = "🎥 Videó"
+													case "document":
+														messageText = "📄 Dokumentum"
+													case "location":
+														messageText = "📍 Helyzetmegosztás"
+													case "contact":
+														messageText = "📇 Névjegy"
+													case "reaction":
+														messageText = "😊 Reakció"
+													case "interactive":
+														messageText = "🔘 Interaktív üzenet"
+													default:
+														messageText = fmt.Sprintf("[%s típusú üzenet]", msgType)
+													}
+												}
+												
+												// Timestamp kiolvasása (opcionális)
+												timestamp := ""
+												if ts, ok := msgMap["timestamp"].(string); ok {
+													timestamp = ts
+												}
+												
+												if messageText != "" {
+													  ircMessage := fmt.Sprintf("[WhatsApp] 📱 %s (%s) [%s]: %s", senderName, senderNumber, timestamp, messageText)
+													// Itt használjuk a meglévő sendToAll funkciót
+													channels := p.config.YnMMedia["Notify"]
+													if len(channels) == 0 {
+														channels = []string{p.defaultChan}
+													}
+													for _, ch := range channels {
+														if strings.HasPrefix(ch, "#") {
+															p.bot.SendMessage(ch, ircMessage)
+														} else if len(ch) >= 17 && len(ch) <= 20 && p.discordPlugin != nil && p.discordPlugin.Adapter != nil {
+															p.discordPlugin.Adapter.SendMessage(ch, ircMessage)
+														}
+													}
+													log.Printf("[WebhookPlugin] ✅ WhatsApp üzenet továbbítva: %s (%s) -> %s", senderName, senderNumber, messageText)
+												} else {
+													log.Printf("[WebhookPlugin] ⚠️ WhatsApp üzenet érkezett, de nem sikerült kiolvasni a szöveget")
+												}
+											}
+										}
+									} else {
+										log.Printf("[WebhookPlugin] ⚠️ Nincs 'messages' tömb az értékben")
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		} else {
+			log.Printf("[WebhookPlugin] ⚠️ WhatsApp webhook, de nem található 'entry' mező")
+		}
+		
+		// Sikeres válasz a Meta felé
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("WhatsApp webhook feldolgozva"))
+		return
+	}
+
+    // ======================================================
 
 	// 4. Bejövő adatok naplózása
 	//log.Printf("")
@@ -177,25 +314,22 @@ func (p *WebhookPlugin) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch notificationType {
-case "Notify":
-    msg := getString("Message")
-    
-    // Ha nincs Message mező, de van msg (kisbetűs) mező, akkor azt használjuk
-    if msg == "" {
-        if rawMsg, ok := data["msg"].(string); ok && rawMsg != "" {
-            msg = rawMsg
-          //  log.Printf("[WebhookPlugin] 📡 'msg' mezőből kinyert üzenet: %s", msg)
-        }
-    }
-    
-  //  log.Printf("[WebhookPlugin] 🔔 Végleges üzenet: '%s'", msg)
-    
-    if msg == "" {
-        msg = "Üzenet érkezett, de üres volt."
-    }
-    
-    ircMessage = fmt.Sprintf("[🤖] 🔔 %s", msg)
-	 sendToAll(ircMessage)
+	case "Notify":
+		msg := getString("Message")
+		
+		// Ha nincs Message mező, de van msg (kisbetűs) mező, akkor azt használjuk
+		if msg == "" {
+			if rawMsg, ok := data["msg"].(string); ok && rawMsg != "" {
+				msg = rawMsg
+			}
+		}
+		
+		if msg == "" {
+			msg = "Üzenet érkezett, de üres volt."
+		}
+		
+		ircMessage = fmt.Sprintf("[🤖] 🔔 %s", msg)
+		sendToAll(ircMessage)
 
 	
 	case "Kuma":
