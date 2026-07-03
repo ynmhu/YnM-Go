@@ -8,8 +8,8 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/mmcdole/gofeed v1.3.0
 	github.com/shirou/gopsutil v3.21.11+incompatible
-	golang.org/x/crypto v0.45.0
-	golang.org/x/text v0.31.0
+	golang.org/x/crypto v0.51.0
+	golang.org/x/text v0.37.0
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -26,6 +26,6 @@ require (
 	github.com/tklauser/go-sysconf v0.3.12 // indirect
 	github.com/tklauser/numcpus v0.6.1 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
-	golang.org/x/net v0.47.0 // indirect
-	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/net v0.55.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
 )
