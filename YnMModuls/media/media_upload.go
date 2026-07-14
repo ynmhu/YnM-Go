@@ -217,7 +217,7 @@ func (p *MediaUploadPlugin) OnTick() []YnMIrC.Message { return nil }
 // sentPathsFile returns the path to the persistence file for sent paths.
 // Derived automatically from the existing SentDatesFile config key.
 func (p *MediaUploadPlugin) sentPathsFile() string {
-	return p.cfg.MediaUpload.SentDatesFile + ".paths"
+	return p.cfg.MediaUpload.SentDatesFile
 }
 
 func (p *MediaUploadPlugin) Start() error {
@@ -558,15 +558,27 @@ func categoryLabel(path string) string {
 
 // ─── Formatting ─────────────────────────────────────────────────────────────
 
+// sanitizeIRCText removes characters that would break IRC line framing
+// (embedded \r / \n cause "malformed line" errors and can drop the connection).
+func sanitizeIRCText(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", " ")
+	s = strings.ReplaceAll(s, "\r", " ")
+	s = strings.ReplaceAll(s, "\n", " ")
+	// collapse repeated whitespace that the above may create
+	s = strings.Join(strings.Fields(s), " ")
+	return strings.TrimSpace(s)
+}
+
 func (p *MediaUploadPlugin) FormatMediaMessage(m *MediaItem) []string {
 	runtime := ""
 	if ticks, err := p.parseRuntimeTicks(m.RuntimeTicks); err == nil {
 		runtime = ticks
 	}
 
-	title := p.extractTitle(m)
+	title := sanitizeIRCText(p.extractTitle(m))
+	genres := sanitizeIRCText(m.Genres)
 
-	overview := m.Overview
+	overview := sanitizeIRCText(m.Overview)
 	if overview == "" {
 		overview = "Nincs elérhető leírás."
 	} else if len(overview) > 600 {
@@ -580,13 +592,12 @@ func (p *MediaUploadPlugin) FormatMediaMessage(m *MediaItem) []string {
 	created := strings.Split(m.DateCreated, ".")[0]
 
 	return []string{
-		fmt.Sprintf(" 「 ✦ %s ✦ 」 | 🎭: %s", title, m.Genres),
+		fmt.Sprintf(" 「 ✦ %s ✦ 」 | 🎭: %s", title, genres),
 		fmt.Sprintf("👆: %s | 📂: %s ", created, categoryLabel(m.Path)),
 		fmt.Sprintf("⏰: %s | 📅: %d 🎥", runtime, m.ProductionYear),
 		fmt.Sprintf("📝: %s", overview),
 	}
 }
-
 func (p *MediaUploadPlugin) FormatDiscordMediaMessage(m *MediaItem) string {
 	runtime := ""
 	if ticks, err := p.parseRuntimeTicks(m.RuntimeTicks); err == nil {
