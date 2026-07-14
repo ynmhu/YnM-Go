@@ -491,19 +491,23 @@ func (p *UnifiedUpdatePlugin) updateFromGit(dir string) error {
 }
 
 func (p *UnifiedUpdatePlugin) buildBinary(goBinary, dir string) error {
+	// Régi bináris törlése
+	_ = os.Remove(filepath.Join(dir, "YnM-Go"))
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	cmdBuild := exec.CommandContext(ctx, goBinary, "build")
+	cmdBuild := exec.CommandContext(ctx, goBinary, "build", "-o", "YnM-Go")
 	cmdBuild.Dir = dir
+
 	if out, err := cmdBuild.CombinedOutput(); err != nil {
 		errorOutput := strings.TrimSpace(string(out))
 		if errorOutput != "" {
 			return fmt.Errorf("build error: %s", errorOutput)
-		} else {
-			return fmt.Errorf("unknown build error")
 		}
+		return fmt.Errorf("unknown build error")
 	}
+
 	return nil
 }
 
