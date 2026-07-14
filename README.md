@@ -212,5 +212,5 @@ IRC Bot • Go Language • YnM • Golang • Plugin System • YnM Bot • Cha
 **Developed by:** Markus (YnM.hu)  
 📧 **Email:** [markus@ynm.hu](mailto:markus@ynm.hu)  
 🌐 **Website:** https://ynm.hu  
-📋 **Copyright:** 2012-2025 – All rights reserved.
+📋 **Copyright:** 2012-2026 – All rights reserved.
 
