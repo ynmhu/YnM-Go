@@ -472,6 +472,11 @@ type MediaActivityConfig struct {
 	OnlineCooldown   int    `yaml:"online_cooldown"`
 	BaseDataDir      string `yaml:"base_data_dir"`
 	NotificationURL  string `yaml:"notification_url"`
+	ReportMultiplier int    `json:"report_multiplier" yaml:"report_multiplier"`
+	ReportOffset     int `json:"report_offset"     yaml:"report_offset"`
+    ReportTime      string `json:"report_time" yaml:"report_time"`   // formátum: "HH:MM", pl. "19:00"; ha üres → indítástól 24h
+    RunOnStart      bool   `json:"run_on_start" yaml:"run_on_start"` // ha true, azonnal lefut induláskor
+
 }
 
 type WeatherConfig struct {

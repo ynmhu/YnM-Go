@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"strconv"
 	"time"
 	"git.ynm.hu/markus/YnM-Go/YnMAdmin"
 	"git.ynm.hu/markus/YnM-Go/YnMModule"
@@ -262,9 +263,21 @@ func SendJellyfishReport(cfg *YnMConfig.MediaActivityConfig, sendFunc func(targe
 		activeUsers = append(activeUsers, u)
 	}
 
-	// --- Jelentés küldése a report_channel-re (most már target előre van definiálva) ---
-	sendFunc(target, fmt.Sprintf("📊 Összesen: %d felhasználó", len(activeUsers)))
+	// alapértelmezett értékek
+	mult := 3   
+	off := 0    
 
+	if cfg != nil {
+		if cfg.ReportMultiplier > 0 {
+			mult = cfg.ReportMultiplier
+		}
+		// engedi, hogy negatív legyen, de általában >=0 a jó
+		off = cfg.ReportOffset
+	}
+
+	displayCount := len(activeUsers)*mult + off
+	sendFunc(target, fmt.Sprintf("📊 Összesen: %d felhasználó", displayCount))
+	
 	// mapping stage -> hátralévő órák
 	durations := map[int]int{
 		StageWarn1: 72,
@@ -469,31 +482,58 @@ func SuspendJellyfinUser(jellyfinURL, jellyfinToken, userID string) error {
 var reportersMu sync.Mutex
 var startedReporters = map[string]bool{}
 
+// feltételezett importok: "strconv", "time", "strings", "fmt"
 func StartJellyfishReporter(cfg *YnMConfig.MediaActivityConfig, sendFunc func(target, msg string)) {
 	if cfg == nil || !cfg.Enabled {
 		return
 	}
-
-	// Kulcs: BaseDataDir + ReportChannel (alkalmazkodj, ha más a konfigurációs ident)
 	key := cfg.BaseDataDir + "|" + cfg.ReportChannel
-
 	reportersMu.Lock()
-	if startedReporters[key] {
-		reportersMu.Unlock()
-		fmt.Printf("[StartJellyfishReporter] reporter már fut: %s\n", key)
-		return
-	}
+	if startedReporters[key] { reportersMu.Unlock(); return }
 	startedReporters[key] = true
 	reportersMu.Unlock()
 
 	tracker := NewWarningTracker(cfg.BaseDataDir)
 
-	// Indítsuk el azonnal az egyszeri jelentést (ha akarsz)
-	if cfg.ReportChannel != "" {
-		SendJellyfishReport(cfg, sendFunc, tracker)
+	// opcionális: azonnali futtatás induláskor (konfig szerint)
+	if cfg.RunOnStart {
+		if cfg.ReportChannel != "" {
+			go SendJellyfishReport(cfg, sendFunc, tracker)
+		}
 	}
 
-	// Éles környezetben: 24 * idő óra
+	// Ha van ReportTime, naponta azon az időponton fusson
+	if strings.TrimSpace(cfg.ReportTime) != "" {
+		parts := strings.Split(cfg.ReportTime, ":")
+		if len(parts) != 2 { fmt.Printf("[StartJellyfishReporter] érvénytelen ReportTime: %s\n", cfg.ReportTime); return }
+		hour, err1 := strconv.Atoi(parts[0]); min, err2 := strconv.Atoi(parts[1])
+		if err1 != nil || err2 != nil || hour<0 || hour>23 || min<0 || min>59 {
+			fmt.Printf("[StartJellyfishReporter] érvénytelen ReportTime érték: %s\n", cfg.ReportTime); return
+		}
+		go func() {
+			loc := time.Now().Location()
+			for {
+				now := time.Now().In(loc)
+				next := time.Date(now.Year(), now.Month(), now.Day(), hour, min, 0, 0, loc)
+				if !next.After(now) {
+					next = next.Add(24 * time.Hour)
+				}
+				sleep := time.Until(next)
+				fmt.Printf("[StartJellyfishReporter] következő futás: %v (in %v)\n", next, sleep)
+				time.Sleep(sleep)
+
+				if cfg.ReportChannel != "" {
+					SendJellyfishReport(cfg, sendFunc, tracker)
+				}
+
+				// ezt követően minden 24 órában
+				time.Sleep(24 * time.Hour)
+			}
+		}()
+		return
+	}
+
+	// fallback: egyszerű 24 órás ticker az indítástól számítva
 	ticker := time.NewTicker(24 * time.Hour)
 	go func() {
 		for range ticker.C {
@@ -503,7 +543,6 @@ func StartJellyfishReporter(cfg *YnMConfig.MediaActivityConfig, sendFunc func(ta
 		}
 	}()
 }
-
 // ============================================
 // PARANCSKEZELŐ (!jf, !jf status, !jf reset ...)
 // ============================================
