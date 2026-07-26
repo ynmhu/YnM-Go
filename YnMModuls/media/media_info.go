@@ -1,6 +1,6 @@
 // ==================================================
-//  Szerzői jog © 2025 Markus (markus@ynm.hu)
-//  Javított verzió - Discord kompatibilis
+// Szerzői jog © 2025 Markus (markus@ynm.hu)
+// Javított verzió - Több találat listázása
 // ==================================================
 
 package media
@@ -18,14 +18,14 @@ import (
 )
 
 type JellyfinInfoPlugin struct {
-	bot     *YnMIrC.Client
-	dbPath  string
-	mutex   sync.Mutex
+	bot *YnMIrC.Client
+	dbPath string
+	mutex sync.Mutex
 }
 
 func NewJellyfinInfoPlugin(bot *YnMIrC.Client, dbPath string) *JellyfinInfoPlugin {
 	return &JellyfinInfoPlugin{
-		bot:    bot,
+		bot: bot,
 		dbPath: dbPath,
 	}
 }
@@ -39,7 +39,7 @@ func (p *JellyfinInfoPlugin) Commands() []string {
 }
 
 func (p *JellyfinInfoPlugin) Help() string {
-	return "!info <cím> - Film vagy sorozat információk keresése a Jellyfin adatbázisban"
+	return "!info <cím> - Film vagy sorozat keresése. Több találatnál listát ad."
 }
 
 func (p *JellyfinInfoPlugin) HandleMessage(msg YnMIrC.Message) string {
@@ -48,18 +48,18 @@ func (p *JellyfinInfoPlugin) HandleMessage(msg YnMIrC.Message) string {
 	if strings.HasPrefix(text, "!info") {
 		title := strings.TrimSpace(strings.TrimPrefix(text, "!info"))
 		if title == "" {
-			return "Használat: !info Film címe"
+			return "Használat:!info Film címe"
 		}
 		
-		// ✨ VÁLTOZÁS: Megkülönböztetjük az IRC és Discord csatornákat
+		// Idézőjelek levétele ha vannak
+		title = strings.Trim(title, `"'`)
+		
 		if strings.HasPrefix(msg.Channel, "#") {
-			// IRC: goroutine-ban küldjük az üzeneteket
 			go p.searchAndSendMedia(msg.Channel, title)
 			return ""
 		} else {
-			// Discord: visszatérünk a válasszal
 			return p.searchMedia(msg.Channel, title)
-		}
+	}
 	}
 	
 	return ""
@@ -69,64 +69,212 @@ func (p *JellyfinInfoPlugin) OnTick() []YnMIrC.Message {
 	return nil
 }
 
-// MediaInfo struktúra a média információkhoz
 type MediaInfo struct {
+	Name string
 	OriginalTitle string
-	Overview      string
-	Runtime       string
-	MediaType     string
+	Overview string
+	Runtime string
+	MediaType string
 }
 
-// searchMedia - Discord kompatibilis verzió (visszatér a válasszal)
+// searchMedia - Discord verzió
 func (p *JellyfinInfoPlugin) searchMedia(channel, title string) string {
-    info, err := p.getMovieInfo(title)
-    if err != nil {
+    results, exact, err := p.findMedia(title)
+    if err!= nil {
         return "A film vagy sorozat nem található az adatbázisban!"
     }
 
-    mediaTypeHu := "Film"
-    if info.MediaType == "MediaBrowser.Controller.Entities.TV.Series" {
-        mediaTypeHu = "Sorozat"
+    // Ha pontos találat van
+    if exact!= nil {
+        return p.formatSingleResult(*exact)
     }
 
-    // ✨ VÁLTOZÁS: Egyetlen stringben visszatérünk Discord számára
-    response := fmt.Sprintf("[%s] megtalálva a YnM Media adatbázisban (%s):\n", title, mediaTypeHu)
-    response += fmt.Sprintf("Cím: %s\n", info.OriginalTitle)
-    response += fmt.Sprintf("Időtartam: %s\n", info.Runtime)
-    response += fmt.Sprintf("Áttekintés: %s", truncateText(info.Overview, 1500)) // Korlátozzuk a hosszt
-    
-    return response
+    // Ha lista van
+    return p.formatMultipleResults(title, results)
 }
 
-// searchAndSendMedia - IRC kompatibilis verzió (küldi az üzeneteket)
+// IRC verzió
 func (p *JellyfinInfoPlugin) searchAndSendMedia(channel, title string) {
-    info, err := p.getMovieInfo(title)
-    if err != nil {
+    results, exact, err := p.findMedia(title)
+    if err!= nil {
         p.bot.SendMessage(channel, "A film vagy sorozat nem található az adatbázisban!")
         return
     }
 
+    if exact!= nil {
+        p.sendSingleResult(channel, *exact)
+        return
+    }
+
+    p.sendMultipleResults(channel, title, results)
+}
+
+
+// ÚJ: Keresés ami több eredményt ad vissza
+func (p *JellyfinInfoPlugin) findMedia(title string) ([]MediaInfo, *MediaInfo, error) {
+    p.mutex.Lock()
+    defer p.mutex.Unlock()
+
+    normalizedSearch := normalizeSearchTerm(title)
+
+    db, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?mode=ro", p.dbPath))
+    if err!= nil {
+        return nil, nil, err
+    }
+    defer db.Close()
+
+    query := `SELECT Name, CleanName, OriginalTitle, RunTimeTicks, Overview, Type
+              FROM BaseItems
+              WHERE (type = 'MediaBrowser.Controller.Entities.Movies.Movie' OR
+                     type = 'MediaBrowser.Controller.Entities.TV.Series')`
+
+    rows, err := db.Query(query)
+    if err!= nil {
+        return nil, nil, err
+    }
+    defer rows.Close()
+
+    var results []MediaInfo
+    var exactMatch *MediaInfo
+    seen := make(map[string]bool)
+
+    for rows.Next() {
+        var name, cleanName, originalTitle, overview, mediaType sql.NullString
+        var runtimeTicks sql.NullInt64
+
+        err := rows.Scan(&name, &cleanName, &originalTitle, &runtimeTicks, &overview, &mediaType)
+        if err!= nil { continue }
+
+        candidates := []string{name.String, cleanName.String, originalTitle.String}
+
+        foundForThisItem := false // JAVÍTÁS: hogy minden candidate-et megnézzen
+
+        for _, candidate := range candidates {
+            if candidate == "" || foundForThisItem { continue } // már találtuk ennél a filmnél
+
+            normalizedCandidate := normalizeSearchTerm(candidate)
+
+            displayTitle := cleanName.String
+            if originalTitle.Valid && originalTitle.String!= "" {
+                displayTitle = originalTitle.String
+            }
+            if mediaType.String == "MediaBrowser.Controller.Entities.TV.Series" {
+                displayTitle = cleanSeriesTitle(displayTitle)
+            }
+
+            if seen[displayTitle] {
+                foundForThisItem = true
+                continue
+            }
+            seen[displayTitle] = true
+
+            runtime := "Ismeretlen"
+            if runtimeTicks.Valid { runtime = TicksToTime(runtimeTicks.Int64) }
+
+            ov := "Nincs áttekintés elérhető."
+            if overview.Valid && overview.String!= "" &&
+            !strings.Contains(strings.ToLower(overview.String), "no overview available") {
+                ov = overview.String
+            }
+
+            media := MediaInfo{
+                Name: displayTitle,
+                OriginalTitle: displayTitle,
+                Overview: ov,
+                Runtime: runtime,
+                MediaType: mediaType.String,
+            }
+
+            // 1. PONTOS EGYEZÉS ELLENŐRZÉS
+            if normalizedCandidate == normalizedSearch {
+                exactMatch = &media
+                break // kilép candidate loopból
+            }
+
+            // 2. RÉSZLEGES EGYEZÉS
+            if strings.Contains(normalizedCandidate, normalizedSearch) {
+                results = append(results, media)
+                foundForThisItem = true // ne vegye fel többször ugyanazt a filmet
+            }
+        }
+
+        if exactMatch!= nil { break }
+        if len(results) >= 10 { break }
+    }
+
+    if exactMatch!= nil {
+        return nil, exactMatch, nil // pontos találat
+    }
+    if len(results) == 0 {
+        return nil, nil, fmt.Errorf("nem található")
+    }
+    return results, nil, nil // lista
+}
+
+
+
+
+func (p *JellyfinInfoPlugin) formatMultipleResults(search string, results []MediaInfo) string {
+    var titles []string
+    for _, r := range results {
+        titles = append(titles, fmt.Sprintf(`"%s"`, r.Name))
+    }
+
+    response := fmt.Sprintf("`%s` keresésre %d találat: %s", search, len(results), strings.Join(titles, " | "))
+    // JAVÍTÁS: az első találatot ajánlja példának
+    if len(results) > 0 {
+        response += fmt.Sprintf("\nPontosításhoz: `!info \"%s\"`", results[0].Name)
+    }
+    return response
+}
+
+func (p *JellyfinInfoPlugin) sendMultipleResults(channel, search string, results []MediaInfo) {
+    var titles []string
+    for _, r := range results {
+        titles = append(titles, fmt.Sprintf(`"%s"`, r.Name))
+    }
+
+    p.bot.SendMessage(channel, fmt.Sprintf("[%s] keresésre %d találat: %s", search, len(results), strings.Join(titles, " | ")))
+    // JAVÍTÁS: az első találatot ajánlja példának
+    if len(results) > 0 {
+        p.bot.SendMessage(channel, fmt.Sprintf(`Pontosításhoz: !info %s `, results[0].Name))
+    }
+}
+
+
+
+// Egy találat formázása
+func (p *JellyfinInfoPlugin) formatSingleResult(r MediaInfo) string {
     mediaTypeHu := "Film"
-    if info.MediaType == "MediaBrowser.Controller.Entities.TV.Series" {
+    if r.MediaType == "MediaBrowser.Controller.Entities.TV.Series" {
         mediaTypeHu = "Sorozat"
     }
 
-    // IRC: közvetlen üzenetküldés
-    p.bot.SendMessage(channel, fmt.Sprintf("[%s] megtalálva a YnM Media adatbázisban (%s):", title, mediaTypeHu))
-    p.bot.SendMessage(channel, fmt.Sprintf("Cím: %s", info.OriginalTitle))
-    p.bot.SendMessage(channel, fmt.Sprintf("Időtartam: %s", info.Runtime))
-    p.sendLongMessage(channel, "Áttekintés: "+info.Overview)
+    response := fmt.Sprintf("[%s] megtalálva a YnM Media adatbázisban (%s):\n", r.Name, mediaTypeHu)
+    response += fmt.Sprintf("Cím: %s\n", r.OriginalTitle)
+    response += fmt.Sprintf("Időtartam: %s\n", r.Runtime)
+    response += fmt.Sprintf("Áttekintés: %s", truncateText(r.Overview, 1500))
+    return response
 }
 
-// Segédfüggvény: szöveg rövidítése
-func truncateText(text string, maxLength int) string {
-    if len(text) <= maxLength {
-        return text
+func (p *JellyfinInfoPlugin) sendSingleResult(channel string, r MediaInfo) {
+    mediaTypeHu := "Film"
+    if r.MediaType == "MediaBrowser.Controller.Entities.TV.Series" {
+        mediaTypeHu = "Sorozat"
     }
+
+    p.bot.SendMessage(channel, fmt.Sprintf("[%s] megtalálva a YnM Media adatbázisban (%s):", r.Name, mediaTypeHu))
+    p.bot.SendMessage(channel, fmt.Sprintf("Cím: %s", r.OriginalTitle))
+    p.bot.SendMessage(channel, fmt.Sprintf("Időtartam: %s", r.Runtime))
+    p.sendLongMessage(channel, "Áttekintés: "+r.Overview)
+}
+
+// A többi függvény ugyanaz mint nálad
+func truncateText(text string, maxLength int) string {
+    if len(text) <= maxLength { return text }
     return text[:maxLength-3] + "..."
 }
 
-// cleanSeriesTitle eltávolítja az SxxExx jellegű epizód azonosítót
 func cleanSeriesTitle(title string) string {
     re := regexp.MustCompile(`(?i)\.S\d{1,2}E\d{1,2}.*$`)
     title = re.ReplaceAllString(title, "")
@@ -134,118 +282,28 @@ func cleanSeriesTitle(title string) string {
     return strings.TrimSpace(title)
 }
 
-// getMovieInfo keres a Jellyfin adatbázisban (marad változatlan)
-func (p *JellyfinInfoPlugin) getMovieInfo(title string) (*MediaInfo, error) {
-    p.mutex.Lock()
-    defer p.mutex.Unlock()
-
-    normalizedSearch := normalizeSearchTerm(title)
-
-    db, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?mode=ro", p.dbPath))
-    if err != nil {
-        return nil, fmt.Errorf("adatbázis megnyitási hiba: %v", err)
-    }
-    defer db.Close()
-
-    query := `SELECT Name, CleanName, OriginalTitle, RunTimeTicks, DateCreated, Overview, Type
-              FROM BaseItems 
-              WHERE (type = 'MediaBrowser.Controller.Entities.Movies.Movie' OR 
-                     type = 'MediaBrowser.Controller.Entities.TV.Series')`
-
-    rows, err := db.Query(query)
-    if err != nil {
-        return nil, fmt.Errorf("lekérdezési hiba: %v", err)
-    }
-    defer rows.Close()
-
-    for rows.Next() {
-        var name, cleanName, originalTitle, overview, mediaType sql.NullString
-        var runtimeTicks sql.NullInt64
-        var dateCreated sql.NullString
-
-        err := rows.Scan(&name, &cleanName, &originalTitle, &runtimeTicks, &dateCreated, &overview, &mediaType)
-        if err != nil {
-            continue
-        }
-
-        candidates := []string{name.String, cleanName.String, originalTitle.String}
-        
-        for _, candidate := range candidates {
-            if candidate != "" {
-                normalizedCandidate := normalizeSearchTerm(candidate)
-                if strings.Contains(normalizedCandidate, normalizedSearch) {
-                    result := &MediaInfo{}
-                    
-                    if originalTitle.Valid && originalTitle.String != "" {
-                        result.OriginalTitle = originalTitle.String
-                    } else {
-                        result.OriginalTitle = cleanName.String
-                    }
-                    
-                    if runtimeTicks.Valid {
-                        result.Runtime = TicksToTime(runtimeTicks.Int64)
-                    } else {
-                        result.Runtime = "Ismeretlen"
-                    }
-                    
-                    if overview.Valid && overview.String != "" && 
-                       !strings.Contains(strings.ToLower(overview.String), "no overview available") &&
-                       !strings.Contains(strings.ToLower(overview.String), "nincs áttekintés elérhető") {
-                        result.Overview = overview.String
-                    } else {
-                        result.Overview = "Nincs áttekintés elérhető."
-                    }
-                    
-                    result.MediaType = mediaType.String
-                    
-                    if mediaType.String == "MediaBrowser.Controller.Entities.TV.Series" {
-                        result.OriginalTitle = cleanSeriesTitle(result.OriginalTitle)
-                    }
-                    
-                    return result, nil
-                }
-            }
-        }
-    }
-    
-    return nil, fmt.Errorf("nem található")
-}
-
-// A többi segédfüggvény marad változatlan...
 func (p *JellyfinInfoPlugin) sendLongMessage(channel, text string) {
     maxLength := 800
     words := strings.Fields(text)
     var buffer strings.Builder
-    
     for _, word := range words {
         if buffer.Len()+len(word)+1 > maxLength {
             p.bot.SendMessage(channel, buffer.String())
             buffer.Reset()
         }
-        if buffer.Len() > 0 {
-            buffer.WriteString(" ")
-        }
+        if buffer.Len() > 0 { buffer.WriteString(" ") }
         buffer.WriteString(word)
     }
-    
-    if buffer.Len() > 0 {
-        p.bot.SendMessage(channel, buffer.String())
-    }
+    if buffer.Len() > 0 { p.bot.SendMessage(channel, buffer.String()) }
 }
 
 func normalizeSearchTerm(term string) string {
     term = strings.ToLower(term)
     term = removeAccents(term)
-    
-    replacer := strings.NewReplacer(
-        ".", " ", "_", " ", "-", " ", ":", " ",
-        "'", "", "\"", "", "!", "",
-    )
+    replacer := strings.NewReplacer(".", " ", "_", " ", "-", " ", ":", " ", "'", "", "\"", "", "!", "")
     term = replacer.Replace(term)
-    
     term = strings.TrimPrefix(term, "the ")
     term = strings.TrimPrefix(term, "a ")
-    
     return strings.Join(strings.Fields(term), " ")
 }
 
@@ -253,14 +311,18 @@ func removeAccents(text string) string {
     var result strings.Builder
     for _, r := range text {
         switch r {
-        case 'ă', 'â': result.WriteRune('a')
-        case 'î': result.WriteRune('i')
+        case 'á', 'à', 'â', 'ä', 'ã', 'å', 'ă', 'ā': result.WriteRune('a')
+        case 'é', 'è', 'ê', 'ë', 'ē', 'ę': result.WriteRune('e')
+        case 'í', 'ì', 'î', 'ï', 'ī': result.WriteRune('i')
+        case 'ó', 'ò', 'ô', 'ö', 'ő', 'õ', 'ø', 'ō': result.WriteRune('o')
+        case 'ú', 'ù', 'û', 'ü', 'ű', 'ū': result.WriteRune('u')
+        case 'ç', 'ć': result.WriteRune('c')
+        case 'ñ': result.WriteRune('n')
         case 'ș', 'ş': result.WriteRune('s')
         case 'ț', 'ţ': result.WriteRune('t')
+        case 'ý', 'ÿ': result.WriteRune('y')
         default:
-            if !unicode.Is(unicode.Mn, r) {
-                result.WriteRune(r)
-            }
+            if!unicode.Is(unicode.Mn, r) { result.WriteRune(r) }
         }
     }
     return result.String()

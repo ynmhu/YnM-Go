@@ -762,7 +762,7 @@ func isInvokerAdmin(adminPlugin *owner.YnmAdminPlugin, db *YnMDb.AdminDB, invoke
 func HandleJellyfishCommand(cfg *YnMConfig.MediaActivityConfig, sendFunc func(target, msg string),
 	rawMsg, invokerNick, invokerHost, channel string, adminPlugin *owner.YnmAdminPlugin, db *YnMDb.AdminDB) bool {
 
-	fmt.Printf("[HandleJellyfishCommand] nyers üzenet: %q (invoker=%s host=%s channel=%s)\n", rawMsg, invokerNick, invokerHost, channel)
+	//fmt.Printf("[HandleJellyfishCommand] nyers üzenet: %q (invoker=%s host=%s channel=%s)\n", rawMsg, invokerNick, invokerHost, channel)
 
 	fields := strings.Fields(rawMsg)
 	if len(fields) == 0 {
