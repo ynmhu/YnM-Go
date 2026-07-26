@@ -1087,9 +1087,13 @@ if cfg.Plugins.EnableWebhook {
 	}
 
 	if cfg.Plugins.EnableMediaActivity && cfg.MediaActivity != nil && cfg.MediaActivity.Enabled {
-		mediaActivityPlugin := media.NewMediaActivityPlugin(bot, cfg.MediaActivity)
+		// Pass the admin plugin and adminDB so the media plugin can perform DB-based admin checks
+		mediaActivityPlugin := media.NewMediaActivityPlugin(bot, cfg.MediaActivity, ynmAdminPlugin, pm.adminDB)
 		pm.manager.Register(mediaActivityPlugin)
 		mediaActivityPlugin.Start()
+
+		// 📢 JELENTÉS INDÍTÁSA (24 óránként)
+		media.StartJellyfishReporter(cfg.MediaActivity, bot.SendMessage)
 		//log.Printf("✅ Media activity plugin regisztrálva (check interval: %ds)", cfg.MediaActivity.CheckInterval)
 	}
 

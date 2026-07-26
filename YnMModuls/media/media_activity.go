@@ -21,8 +21,10 @@ import (
 	"strings"
 	"sync"
 	"time"
-
+	"git.ynm.hu/markus/YnM-Go/YnMModule"
 	"git.ynm.hu/markus/YnM-Go/YnMConfig"
+	"git.ynm.hu/markus/YnM-Go/YnMAdmin"
+	"git.ynm.hu/markus/YnM-Go/YnMDb"
 	"git.ynm.hu/markus/YnM-Go/YnMIrC"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -33,17 +35,23 @@ type MediaActivityPlugin struct {
 	lastActivityID  int
 	lastOnlineTimes map[string]time.Time
 	mutex           sync.Mutex
-	stopChan chan struct{}
+	stopChan        chan struct{}
+	// ADD:
+	adminPlugin     *owner.YnmAdminPlugin
+	Db              *YnMDb.AdminDB
 }
 
 
-func NewMediaActivityPlugin(bot *YnMIrC.Client, cfg *YnMConfig.MediaActivityConfig) *MediaActivityPlugin {
+func NewMediaActivityPlugin(bot *YnMIrC.Client, cfg *YnMConfig.MediaActivityConfig, adminPlugin *owner.YnmAdminPlugin, db *YnMDb.AdminDB) *MediaActivityPlugin {
 	return &MediaActivityPlugin{
-		bot:            bot,
-		cfg:           cfg,
+		bot:             bot,
+		cfg:             cfg,
 		lastOnlineTimes: make(map[string]time.Time),
+		adminPlugin:     adminPlugin,
+		Db:              db,
 	}
 }
+
 func (p *MediaActivityPlugin) Start() {
     p.stopChan = make(chan struct{})
     go p.run()
@@ -76,14 +84,43 @@ func (p *MediaActivityPlugin) Name() string {
 }
 
 func (p *MediaActivityPlugin) Commands() []string {
-	return []string{}
+	return []string{"!jf", "!jfstatus", "!jfreset"}
 }
 
 func (p *MediaActivityPlugin) Help() string {
-	return "Automatikus média aktivitás követés"
+	return "Automatikus média aktivitás követés (!jf, !jfstatus, !jfreset <user|all>)"
 }
 
 func (p *MediaActivityPlugin) HandleMessage(msg YnMIrC.Message) string {
+	invokerNick := ""
+	invokerHost := ""
+
+	// Használjuk az adminPlugin-t, ha van; GetEffectiveNickAndHost elvárja az adminPlugin pointert
+	if p.adminPlugin != nil {
+		invokerNick, invokerHost = YnMModule.GetEffectiveNickAndHost(p.adminPlugin, msg.Sender)
+	} else {
+		// fallback: egyszerűbb parsing
+		if msg.Sender != "" {
+			// kísérlet a hostmask egyszerű feldolgozására
+			parts := strings.Split(msg.Sender, "!")
+			if len(parts) > 0 {
+				invokerNick = parts[0]
+			} else {
+				invokerNick = msg.Sender
+			}
+			invokerHost = msg.Sender
+		} else if msg.Nick != "" {
+			invokerNick = msg.Nick
+			invokerHost = ""
+		}
+	}
+
+	channel := msg.Channel
+
+	sendFunc := func(target, text string) { p.bot.SendMessage(target, text) }
+
+	// HÍVÁS: átadjuk az adminPlugin és a DB pointereket is (biztonságosabb)
+	go HandleJellyfishCommand(p.cfg, sendFunc, msg.Text, invokerNick, invokerHost, channel, p.adminPlugin, p.Db)
 	return ""
 }
 

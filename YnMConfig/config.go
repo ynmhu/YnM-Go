@@ -459,13 +459,17 @@ type RobotConfig struct {
 	AlertChannel             string  `yaml:"TChan"`
 }
 
+
 type MediaActivityConfig struct {
 	Enabled          bool   `yaml:"enabled"`
 	JellyfinDBPath   string `yaml:"jellyfin_db_path"`
+	JellyfinURL      string `yaml:"jellyfin_url"`
+	JellyfinToken    string `yaml:"jellyfin_token"`
 	CheckInterval    int    `yaml:"check_interval"`
 	IRCChannel       string `yaml:"irc_channel"`
-	OnlineCooldown   int    `yaml:"online_cooldown"`
 	SecondaryChannel string `yaml:"secondary_channel"`
+	ReportChannel    string `yaml:"report_channel"`
+	OnlineCooldown   int    `yaml:"online_cooldown"`
 	BaseDataDir      string `yaml:"base_data_dir"`
 	NotificationURL  string `yaml:"notification_url"`
 }
