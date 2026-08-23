@@ -533,7 +533,15 @@ func (pm *PluginManager) RegisterAll(bot *YnMIrC.Client, cfg *YnMConfig.Config) 
 	
 		//		ChatGPT Plugin
 	if cfg.Plugins.EnableChatGPT {
-		chatGPTPlugin := ynm.NewChatGPTPlugin(bot, ynmAdminPlugin, ynmAdminPlugin.Db, cfg.OpenAI.APIKey, 10*time.Second)
+		chatGPTPlugin := ynm.NewChatGPTPlugin(
+			bot,
+			ynmAdminPlugin,
+			ynmAdminPlugin.Db,
+			cfg.OpenAI.APIKey,
+			"https://openrouter.ai/api/v1/chat/completions",
+			"google/gemma-4-31b-it:free",
+			30*time.Second,
+		)
 		pm.manager.Register(chatGPTPlugin)
 		//log.Printf("✅ ChatGPT plugin regisztrálva")
 	}

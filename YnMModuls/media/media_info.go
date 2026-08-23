@@ -138,19 +138,19 @@ func (p *JellyfinInfoPlugin) findMedia(title string) ([]MediaInfo, *MediaInfo, e
     var exactMatch *MediaInfo
     seen := make(map[string]bool)
 
-    for rows.Next() {
-        var name, cleanName, originalTitle, overview, mediaType sql.NullString
-        var runtimeTicks sql.NullInt64
+	for rows.Next() {
+		var name, cleanName, originalTitle, overview, mediaType sql.NullString
+		var runtimeTicks sql.NullInt64
 
-        err := rows.Scan(&name, &cleanName, &originalTitle, &runtimeTicks, &overview, &mediaType)
-        if err!= nil { continue }
+		err := rows.Scan(&name, &cleanName, &originalTitle, &runtimeTicks, &overview, &mediaType)
+		if err!= nil { continue }
 
-        candidates := []string{name.String, cleanName.String, originalTitle.String}
+		candidates := []string{name.String, cleanName.String, originalTitle.String}
 
-        foundForThisItem := false // JAVÍTÁS: hogy minden candidate-et megnézzen
+		foundForThisItem := false 
 
-        for _, candidate := range candidates {
-            if candidate == "" || foundForThisItem { continue } // már találtuk ennél a filmnél
+		for _, candidate := range candidates {
+			if candidate == "" || foundForThisItem { continue } 
 
             normalizedCandidate := normalizeSearchTerm(candidate)
 
@@ -177,19 +177,20 @@ func (p *JellyfinInfoPlugin) findMedia(title string) ([]MediaInfo, *MediaInfo, e
                 ov = overview.String
             }
 
-            media := MediaInfo{
-                Name: displayTitle,
-                OriginalTitle: displayTitle,
-                Overview: ov,
-                Runtime: runtime,
-                MediaType: mediaType.String,
-            }
+			media := MediaInfo{
+				Name: displayTitle,
+				OriginalTitle: displayTitle,
+				Overview: ov,
+				Runtime: runtime,
+				MediaType: mediaType.String,
+			}
 
-            // 1. PONTOS EGYEZÉS ELLENŐRZÉS
-            if normalizedCandidate == normalizedSearch {
-                exactMatch = &media
-                break // kilép candidate loopból
-            }
+			// 1. PONTOS EGYEZÉS ELLENŐRZÉS - a displayTitle-en nézzük
+			normalizedDisplay := normalizeSearchTerm(displayTitle)
+			if normalizedDisplay == normalizedSearch {
+				exactMatch = &media
+				break
+			}
 
             // 2. RÉSZLEGES EGYEZÉS
             if strings.Contains(normalizedCandidate, normalizedSearch) {
@@ -217,11 +218,14 @@ func (p *JellyfinInfoPlugin) findMedia(title string) ([]MediaInfo, *MediaInfo, e
 func (p *JellyfinInfoPlugin) formatMultipleResults(search string, results []MediaInfo) string {
     var titles []string
     for _, r := range results {
-        titles = append(titles, fmt.Sprintf(`"%s"`, r.Name))
+        mediaTypeHu := "Film"
+        if r.MediaType == "MediaBrowser.Controller.Entities.TV.Series" {
+            mediaTypeHu = "Sorozat"
+        }
+        titles = append(titles, fmt.Sprintf(`"%s" [%s]`, r.Name, mediaTypeHu))
     }
 
     response := fmt.Sprintf("`%s` keresésre %d találat: %s", search, len(results), strings.Join(titles, " | "))
-    // JAVÍTÁS: az első találatot ajánlja példának
     if len(results) > 0 {
         response += fmt.Sprintf("\nPontosításhoz: `!info \"%s\"`", results[0].Name)
     }
@@ -231,13 +235,16 @@ func (p *JellyfinInfoPlugin) formatMultipleResults(search string, results []Medi
 func (p *JellyfinInfoPlugin) sendMultipleResults(channel, search string, results []MediaInfo) {
     var titles []string
     for _, r := range results {
-        titles = append(titles, fmt.Sprintf(`"%s"`, r.Name))
+        mediaTypeHu := "Film"
+        if r.MediaType == "MediaBrowser.Controller.Entities.TV.Series" {
+            mediaTypeHu = "Sorozat"
+        }
+        titles = append(titles, fmt.Sprintf(`"%s" [%s]`, r.Name, mediaTypeHu))
     }
 
     p.bot.SendMessage(channel, fmt.Sprintf("[%s] keresésre %d találat: %s", search, len(results), strings.Join(titles, " | ")))
-    // JAVÍTÁS: az első találatot ajánlja példának
     if len(results) > 0 {
-        p.bot.SendMessage(channel, fmt.Sprintf(`Pontosításhoz: !info %s `, results[0].Name))
+        p.bot.SendMessage(channel, fmt.Sprintf(`Pontosításhoz:!info "%s"`, results[0].Name))
     }
 }
 
