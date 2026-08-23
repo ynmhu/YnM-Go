@@ -116,6 +116,8 @@ type Config struct {
 	GitPlugin GitPluginConfig `yaml:"GitPlugin"`
 	//OnThisDay plugin
 	OnThisDayPlugin OnThisDayPluginConfig `yaml:"OnThisDayPlugin"`
+	//Quote plugin
+	QuotePlugin QuotePluginConfig `yaml:"QuotePlugin"`
 	 // Update notification settings
     UpdateCheck struct {
         Enabled         bool          `yaml:"enabled"`
@@ -217,6 +219,7 @@ type PluginConfig struct {
 	// YnM plugins (existing)
 	EnableGit      bool `yaml:"enable_git"`
 	EnableOnthisDay  bool `yaml:"enableOnthisDay"`
+	EnableQuote      bool `yaml:"enable_quote"`
 	EnableImdb     bool `yaml:"enable_imdb"`
 	EnableMail     bool `yaml:"enable_mail"`
 	EnableXes0     bool `yaml:"enable_xes0"`
@@ -498,6 +501,12 @@ type GitPluginConfig struct {
 type OnThisDayPluginConfig struct {
     Channel  []string `yaml:"channel"`
     PostTime string   `yaml:"postTime"`
+}
+
+type QuotePluginConfig struct {
+    Channel  []string `yaml:"channel"`
+    PostTime string   `yaml:"postTime"`
+    ApiURL   string   `yaml:"apiURL"`
 }
 
 type UndernetConfig struct {

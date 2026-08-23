@@ -140,6 +140,7 @@ func (pm *PluginManager) UpdatePluginStatesInDB(cfg *YnMConfig.Config, channels 
 		"ora":             cfg.Plugins.EnableOra,
 		"huntorrent":      cfg.Plugins.EnableHuntorrent,
 		"horoscope":       cfg.Plugins.EnableHoroscope,
+		"quote":           cfg.Plugins.EnableQuote,
 		"weather":         cfg.Plugins.EnableWeather,
 		"seen":           	cfg.Plugins.EnableSeen,
 		"sms":             	cfg.Plugins.EnableSms,
@@ -584,6 +585,17 @@ func (pm *PluginManager) RegisterAll(bot *YnMIrC.Client, cfg *YnMConfig.Config) 
 		 horoszkopPlugin := ynm.NewHoroszkopPlugin(bot)
 		 pm.manager.Register(horoszkopPlugin)
 		 //log.Printf("✅ Horoszkóp plugin regisztrálva")
+	}
+
+	//		Quote (napi idézet) plugin
+	if cfg.Plugins.EnableQuote {
+		quotePlugin, err := ynm.NewQuotePlugin(bot, cfg.QuotePlugin.ApiURL, cfg.QuotePlugin.Channel, cfg.QuotePlugin.PostTime)
+		if err != nil {
+			log.Printf("⚠️ Quote plugin betöltési hiba: %v (kikapcsolva)", err)
+		} else {
+			pm.manager.Register(quotePlugin)
+			//log.Printf("✅ Quote plugin regisztrálva")
+		}
 	}
 	
 	//		Forum Plugin 
@@ -1296,6 +1308,10 @@ if cfg.Plugins.EnableWebhook {
 	case *ynm.HoroszkopPlugin:
 		// Nincs specifikus cleanup, csak logolás
 		log.Printf("🛑 Horoszkóp plugin leállítva")
+
+	case *ynm.QuotePlugin:
+		// Nincs specifikus cleanup, csak logolás
+		log.Printf("🛑 Quote plugin leállítva")
 
 	case *ynm.ForumPlugin:
 		// Nincs specifikus cleanup, csak logolás
