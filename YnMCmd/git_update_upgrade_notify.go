@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"net/http"
+	"encoding/json"
 
 	"git.ynm.hu/markus/YnM-Go/YnMIrC"
 	"git.ynm.hu/markus/YnM-Go/YnMAdmin"
@@ -31,6 +33,7 @@ type UnifiedUpdatePlugin struct {
 	lastVersion       map[string]time.Time  // For !version command rate limiting
 	hasUpdate         bool
 	latestTag         string
+	lastETag string
 	checkInterval     time.Duration
 	notifyInterval    time.Duration
 	enabled           bool
@@ -269,38 +272,56 @@ func (p *UnifiedUpdatePlugin) checkForUpdate() (bool, string, error) {
 
 // checkForUpdateSync - synchronous version for manual commands
 func (p *UnifiedUpdatePlugin) checkForUpdateSync(dir string) (bool, string, error) {
-	if !p.isGitRepo(dir) {
-		return false, "", fmt.Errorf("not a git repository")
-	}
+    currentVersion := owner.YnMVersion
 
-	currentVersion := owner.YnMVersion
+    ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+    defer cancel()
 
-	// Get remote tags with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+    req, err := http.NewRequestWithContext(ctx, "GET",
+        "https://git.ynm.hu/api/v1/repos/markus/YnM-Go/tags?limit=1", nil)
+    if err != nil {
+        return false, "", fmt.Errorf("request error: %v", err)
+    }
 
-	cmdTags := exec.CommandContext(ctx, "git", "ls-remote", "--tags", "origin")
-	cmdTags.Dir = dir
-	outTags, err := cmdTags.Output()
-	if err != nil {
-		return false, "", fmt.Errorf("git ls-remote error: %v", err)
-	}
+    if p.lastETag != "" {
+        req.Header.Set("If-None-Match", p.lastETag)
+    }
 
-	tags := p.parseTags(string(outTags))
-	if len(tags) == 0 {
-		return false, "", fmt.Errorf("no remote tags found")
-	}
+    resp, err := http.DefaultClient.Do(req)
+    if err != nil {
+        return false, "", fmt.Errorf("http error: %v", err)
+    }
+    defer resp.Body.Close()
 
-	sortedTags := p.sortVersionTags(tags)
-	if len(sortedTags) == 0 {
-		return false, "", fmt.Errorf("no valid semver tags")
-	}
+    if et := resp.Header.Get("ETag"); et != "" {
+        p.lastETag = et
+    }
 
-	latestTag := sortedTags[len(sortedTags)-1]
-	comparison := p.compareVersions(currentVersion, latestTag)
+    switch resp.StatusCode {
+    case http.StatusNotModified:
+        return false, "", nil // 304 → nincs újdonság, ~0 bájt ✅
+    case http.StatusOK:
+        // feldolgozzuk lent
+    default:
+        return false, "", fmt.Errorf("unexpected status: %d", resp.StatusCode)
+    }
 
-	return comparison < 0, latestTag, nil
+    var tags []struct {
+        Name string `json:"name"` // pl. "YnM-v1.0.40.84"
+    }
+    if err := json.NewDecoder(resp.Body).Decode(&tags); err != nil {
+        return false, "", fmt.Errorf("json error: %v", err)
+    }
+    if len(tags) == 0 {
+        return false, "", fmt.Errorf("no tags found")
+    }
+
+    latestTag := tags[0].Name
+    comparison := p.compareVersions(currentVersion, latestTag)
+
+    return comparison < 0, latestTag, nil
 }
+
 
 func (p *UnifiedUpdatePlugin) performUpgrade(targetTag string, isManual bool) error {
 	if p.upgrading {
